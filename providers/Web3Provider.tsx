@@ -5,6 +5,7 @@ import { getDefaultConfig, RainbowKitProvider, darkTheme } from '@rainbow-me/rai
 import { WagmiProvider } from 'wagmi'
 import { mainnet, arbitrum, base, optimism, polygon, zkSync, linea, scroll, mode } from 'wagmi/chains'
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 
 const worldChain = {
   id: 480,
@@ -30,18 +31,20 @@ const ink = {
   blockExplorers: { default: { name: 'Inkscout', url: 'https://explorer.inkonchain.com' } },
 } as const
 
-const config = getDefaultConfig({
+const wagmiConfig = getDefaultConfig({
   appName: 'Lido Earn x Across',
   projectId: 'e6ec1105c1bea07ee25e2ff2cab86514',
   chains: [mainnet, arbitrum, base, optimism, polygon, zkSync, linea, scroll, mode, worldChain, unichain, ink],
   ssr: true,
 })
 
-const queryClient = new QueryClient()
-
 export function Web3Provider({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: 10_000 } },
+  }))
+
   return (
-    <WagmiProvider config={config}>
+    <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
           theme={darkTheme({
