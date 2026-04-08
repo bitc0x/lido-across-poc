@@ -26,9 +26,16 @@ interface AcrossQuote {
   approvalTxns?: Array<{ to: string; data: string; chainId: number }>
 }
 
-function ChainIcon({ color, size = 18 }: { color: string; size?: number }) {
+function ChainIcon({ logoUrl, color, size = 18 }: { logoUrl: string; color: string; size?: number }) {
   return (
-    <span style={{ display: 'inline-block', width: size, height: size, borderRadius: '50%', background: color, flexShrink: 0 }} />
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={logoUrl}
+      alt=""
+      width={size}
+      height={size}
+      style={{ borderRadius: '50%', flexShrink: 0, objectFit: 'cover', background: color }}
+    />
   )
 }
 
@@ -258,7 +265,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
                 style={{ background: 'var(--bg)', border: `1px solid ${chainOpen ? 'var(--blue)' : 'var(--border)'}`, color: 'var(--text)' }}
               >
                 <div className="flex items-center gap-2">
-                  <ChainIcon color={selectedChain.color} />
+                  <ChainIcon logoUrl={selectedChain.logoUrl} color={selectedChain.color} />
                   {selectedChain.name}
                 </div>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -278,7 +285,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
                           background: selectedChain.id === c.id ? 'var(--blue-dim)' : 'transparent',
                           color: selectedChain.id === c.id ? 'var(--blue)' : 'var(--text)',
                         }}>
-                        <ChainIcon color={c.color} />
+                        <ChainIcon logoUrl={c.logoUrl} color={c.color} />
                         {c.name}
                         <span className="ml-auto text-xs" style={{ color: 'var(--muted)' }}>
                           {c.tokens.length} tokens
@@ -301,7 +308,11 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
                   className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap"
                   style={{ background: 'var(--bg)', border: `1px solid ${tokenOpen ? 'var(--blue)' : 'var(--border)'}`, color: 'var(--text)' }}
                 >
-                  {selectedToken.symbol}
+                  <div className="flex items-center gap-1.5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={selectedToken.logoUrl} alt="" width={16} height={16} style={{ borderRadius: '50%', objectFit: 'cover' }} />
+                    {selectedToken.symbol}
+                  </div>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                     style={{ transform: tokenOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
                     <polyline points="6 9 12 15 18 9"/>
@@ -318,7 +329,11 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
                           background: selectedToken.symbol === t.symbol ? 'var(--blue-dim)' : 'transparent',
                           color: selectedToken.symbol === t.symbol ? 'var(--blue)' : 'var(--text)',
                         }}>
-                        <span className="font-bold">{t.symbol}</span>
+                        <span className="flex items-center gap-2">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={t.logoUrl} alt="" width={16} height={16} style={{ borderRadius: '50%', objectFit: 'cover' }} />
+                          <span className="font-bold">{t.symbol}</span>
+                        </span>
                         <span className="text-xs ml-auto" style={{ color: 'var(--muted)' }}>{t.name}</span>
                       </button>
                     ))}
