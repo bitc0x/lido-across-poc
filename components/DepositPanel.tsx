@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAccount, useSendTransaction, useSwitchChain } from 'wagmi'
 import { parseUnits, formatUnits } from 'viem'
 import { SUPPORTED_CHAINS, type ChainInfo, type TokenInfo } from '@/lib/chains'
@@ -21,25 +21,28 @@ interface AcrossQuote {
   expectedOutputAmount: string
   minOutputAmount: string
   expectedFillTime: number
-  fees: {
-    total: { amountUsd: string; amount: string }
-  }
-  swapTx: {
-    to: string
-    data: string
-    value?: string
-    chainId: number
-  }
+  fees: { total: { amountUsd: string; amount: string } }
+  swapTx: { to: string; data: string; value?: string; chainId: number }
   approvalTxns?: Array<{ to: string; data: string; chainId: number }>
 }
 
-function ChainIcon({ color, size = 20 }: { color: string; size?: number }) {
+function ChainIcon({ color, size = 18 }: { color: string; size?: number }) {
   return (
-    <span style={{
-      display: 'inline-block', width: size, height: size,
-      borderRadius: '50%', background: color, flexShrink: 0
-    }} />
+    <span style={{ display: 'inline-block', width: size, height: size, borderRadius: '50%', background: color, flexShrink: 0 }} />
   )
+}
+
+// Safely parse user input without throwing on excess decimal places
+function safeParseUnits(value: string, decimals: number): bigint | null {
+  try {
+    const parts = value.split('.')
+    if (parts.length === 2 && parts[1].length > decimals) {
+      value = `${parts[0]}.${parts[1].slice(0, decimals)}`
+    }
+    return parseUnits(value as `${number}`, decimals)
+  } catch {
+    return null
+  }
 }
 
 export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
@@ -58,16 +61,48 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
   const [chainOpen, setChainOpen] = useState(false)
   const [tokenOpen, setTokenOpen] = useState(false)
 
-  // Reset token when chain changes
+  const chainRef = useRef<HTMLDivElement>(null)
+  const tokenRef = useRef<HTMLDivElement>(null)
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (chainRef.current && !chainRef.current.contains(e.target as Node)) setChainOpen(false)
+      if (tokenRef.current && !tokenRef.current.contains(e.target as Node)) setTokenOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  // Reset token + state when chain changes
   useEffect(() => {
     setSelectedToken(selectedChain.tokens[0])
     setQuote(null)
     setQuoteError('')
+    setTxStatus('idle')
   }, [selectedChain])
 
+  // Reset quote when token or amount changes, and clear error state so user can retry
+  useEffect(() => {
+    setQuote(null)
+    setQuoteError('')
+    if (txStatus === 'error') setTxStatus('idle')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedToken, amount])
+
   const fetchQuote = useCallback(async () => {
-    if (!amount || parseFloat(amount) <= 0) { setQuote(null); return }
-    const amountIn = parseUnits(amount, selectedToken.decimals).toString()
+    if (!amount || parseFloat(amount) <= 0) {
+      setQuote(null)
+      setQuoteError('')
+      return
+    }
+
+    const amountIn = safeParseUnits(amount, selectedToken.decimals)
+    if (!amountIn || amountIn <= 0n) {
+      setQuoteError('Invalid amount')
+      return
+    }
+
     const recipient = address || '0x0000000000000000000000000000000000000001'
     const depositor = address || '0x0000000000000000000000000000000000000001'
     const inputToken = selectedToken.isNative
@@ -82,47 +117,54 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
         outputToken: vault.outputToken.address,
         originChainId: String(selectedChain.id),
         destinationChainId: '1',
-        amount: amountIn,
+        amount: amountIn.toString(),
         recipient,
         depositor,
       })
       const res = await fetch(`/api/across-quote?${params}`)
       const data = await res.json()
-      if (data.message || data.error) {
-        setQuoteError(data.message || data.error)
+      if (data.message || data.error || data.code) {
+        const raw: string = data.message || data.error || ''
+        const friendly = raw.toLowerCase().includes('too low') || raw.toLowerCase().includes('minimum')
+          ? 'Amount too low for this route. Try a larger amount.'
+          : raw.toLowerCase().includes('not supported') || raw.toLowerCase().includes('route')
+          ? 'This route is not supported. Try a different token or chain.'
+          : 'Quote unavailable. Try a different amount or token.'
+        setQuoteError(friendly)
         setQuote(null)
       } else {
         setQuote(data)
         setQuoteError('')
       }
     } catch {
-      setQuoteError('Failed to fetch quote')
+      setQuoteError('Network error. Please try again.')
     } finally {
       setLoading(false)
     }
   }, [amount, selectedToken, selectedChain, vault, address])
 
   useEffect(() => {
-    const t = setTimeout(fetchQuote, 600)
+    const t = setTimeout(fetchQuote, 700)
     return () => clearTimeout(t)
   }, [fetchQuote])
 
   const handleDeposit = async () => {
     if (!quote || !address) return
     try {
-      // Switch chain if needed
       if (walletChain?.id !== selectedChain.id) {
         setTxStatus('switching')
         await switchChainAsync({ chainId: selectedChain.id })
       }
-      // Handle approval if needed
       if (quote.approvalTxns?.length) {
         setTxStatus('approving')
         for (const appr of quote.approvalTxns) {
-          await sendTransactionAsync({ to: appr.to as `0x${string}`, data: appr.data as `0x${string}`, chainId: appr.chainId })
+          await sendTransactionAsync({
+            to: appr.to as `0x${string}`,
+            data: appr.data as `0x${string}`,
+            chainId: appr.chainId,
+          })
         }
       }
-      // Execute bridge + swap
       setTxStatus('depositing')
       const tx = quote.swapTx
       const hash = await sendTransactionAsync({
@@ -139,27 +181,48 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
     }
   }
 
-  const outputAmount = quote
-    ? parseFloat(formatUnits(BigInt(quote.expectedOutputAmount), vault.outputToken.decimals)).toFixed(4)
+  const outputAmt = quote
+    ? Number(formatUnits(BigInt(quote.expectedOutputAmount), vault.outputToken.decimals)).toFixed(6)
     : null
-  const minOutputAmount = quote
-    ? parseFloat(formatUnits(BigInt(quote.minOutputAmount), vault.outputToken.decimals)).toFixed(4)
+  const minAmt = quote
+    ? Number(formatUnits(BigInt(quote.minOutputAmount), vault.outputToken.decimals)).toFixed(6)
     : null
   const fillTime = quote?.expectedFillTime ?? null
   const feeUsd = quote?.fees?.total?.amountUsd ?? null
 
-  const needsChainSwitch = address && walletChain?.id !== selectedChain.id
+  const needsChainSwitch = !!address && walletChain?.id !== selectedChain.id
+  const isProcessing = txStatus === 'switching' || txStatus === 'approving' || txStatus === 'depositing'
+  const canDeposit = !!quote && !loading && !isProcessing && !quoteError && !!address
+
+  const buttonLabel = !address
+    ? 'Connect wallet to deposit'
+    : loading
+    ? 'Fetching quote...'
+    : isProcessing
+    ? txStatus === 'switching'
+      ? `Switching to ${selectedChain.name}...`
+      : txStatus === 'approving'
+      ? 'Approving token...'
+      : 'Submitting bridge...'
+    : quoteError
+    ? 'Quote unavailable'
+    : !quote
+    ? 'Enter an amount'
+    : needsChainSwitch
+    ? `Switch to ${selectedChain.name} and deposit`
+    : `Deposit into ${vault.name}`
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(6px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
       <div className="w-full max-w-md rounded-2xl overflow-hidden animate-fade-up"
         style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4"
-          style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
           <div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-base" style={{ color: 'var(--text)' }}>
@@ -174,24 +237,26 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
               Any chain, any asset, one transaction
             </p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors hover:opacity-70"
+          <button onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:opacity-60 transition-opacity"
             style={{ color: 'var(--muted)' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
           </button>
         </div>
 
         <div className="p-5 space-y-4">
-          {/* Chain Selector */}
+
+          {/* Chain selector */}
           <div>
-            <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--muted)' }}>
-              FROM CHAIN
-            </label>
-            <div className="relative">
-              <button onClick={() => { setChainOpen(!chainOpen); setTokenOpen(false) }}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-all"
-                style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+            <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--muted)' }}>FROM CHAIN</label>
+            <div className="relative" ref={chainRef}>
+              <button
+                onClick={() => { setChainOpen(v => !v); setTokenOpen(false) }}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+                style={{ background: 'var(--bg)', border: `1px solid ${chainOpen ? 'var(--blue)' : 'var(--border)'}`, color: 'var(--text)' }}
+              >
                 <div className="flex items-center gap-2">
                   <ChainIcon color={selectedChain.color} />
                   {selectedChain.name}
@@ -202,12 +267,13 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
                 </svg>
               </button>
               {chainOpen && (
-                <div className="absolute z-10 top-full mt-1 w-full rounded-xl overflow-hidden shadow-2xl"
-                  style={{ background: '#0d1222', border: '1px solid var(--border)' }}>
+                <div className="absolute z-20 top-full mt-1 w-full rounded-xl overflow-hidden shadow-2xl"
+                  style={{ background: '#0d1222', border: '1px solid var(--border-hover)' }}>
                   <div className="max-h-52 overflow-y-auto">
                     {SUPPORTED_CHAINS.map(c => (
-                      <button key={c.id} onClick={() => { setSelectedChain(c); setChainOpen(false) }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:opacity-80 transition-opacity"
+                      <button key={c.id}
+                        onClick={() => { setSelectedChain(c); setChainOpen(false) }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-white/5 transition-colors"
                         style={{
                           background: selectedChain.id === c.id ? 'var(--blue-dim)' : 'transparent',
                           color: selectedChain.id === c.id ? 'var(--blue)' : 'var(--text)',
@@ -227,15 +293,14 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
 
           {/* Token + Amount */}
           <div>
-            <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--muted)' }}>
-              YOU SEND
-            </label>
+            <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--muted)' }}>YOU SEND</label>
             <div className="flex gap-2">
-              {/* Token selector */}
-              <div className="relative">
-                <button onClick={() => { setTokenOpen(!tokenOpen); setChainOpen(false) }}
-                  className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all"
-                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+              <div className="relative shrink-0" ref={tokenRef}>
+                <button
+                  onClick={() => { setTokenOpen(v => !v); setChainOpen(false) }}
+                  className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap"
+                  style={{ background: 'var(--bg)', border: `1px solid ${tokenOpen ? 'var(--blue)' : 'var(--border)'}`, color: 'var(--text)' }}
+                >
                   {selectedToken.symbol}
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                     style={{ transform: tokenOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
@@ -243,11 +308,12 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
                   </svg>
                 </button>
                 {tokenOpen && (
-                  <div className="absolute z-10 top-full mt-1 rounded-xl overflow-hidden shadow-2xl"
-                    style={{ background: '#0d1222', border: '1px solid var(--border)', minWidth: 140 }}>
+                  <div className="absolute z-20 top-full mt-1 rounded-xl overflow-hidden shadow-2xl"
+                    style={{ background: '#0d1222', border: '1px solid var(--border-hover)', minWidth: 160 }}>
                     {selectedChain.tokens.map(t => (
-                      <button key={t.address} onClick={() => { setSelectedToken(t); setTokenOpen(false) }}
-                        className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:opacity-80 transition-opacity"
+                      <button key={t.symbol}
+                        onClick={() => { setSelectedToken(t); setTokenOpen(false) }}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-white/5 transition-colors"
                         style={{
                           background: selectedToken.symbol === t.symbol ? 'var(--blue-dim)' : 'transparent',
                           color: selectedToken.symbol === t.symbol ? 'var(--blue)' : 'var(--text)',
@@ -259,41 +325,37 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
                   </div>
                 )}
               </div>
-              {/* Amount input */}
               <input
                 type="number"
                 inputMode="decimal"
                 placeholder="0.00"
                 value={amount}
                 onChange={e => setAmount(e.target.value)}
-                className="flex-1 px-3 py-2.5 rounded-xl text-sm font-semibold outline-none transition-all"
-                style={{
-                  background: 'var(--bg)', border: '1px solid var(--border)',
-                  color: 'var(--text)', minWidth: 0,
-                }}
+                className="flex-1 px-3 py-2.5 rounded-xl text-sm font-semibold outline-none"
+                style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', minWidth: 0, transition: 'border-color 0.15s' }}
                 onFocus={e => (e.target.style.borderColor = 'var(--blue)')}
                 onBlur={e => (e.target.style.borderColor = 'var(--border)')}
               />
             </div>
           </div>
 
-          {/* Route arrow */}
+          {/* Route indicator */}
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-semibold"
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold"
               style={{ background: 'var(--orange-dim)', color: 'var(--orange)' }}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
               </svg>
-              Across routes
+              Across routes to Ethereum
             </div>
             <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
           </div>
 
-          {/* You receive */}
-          <div className="rounded-xl p-3.5 space-y-1" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+          {/* Output */}
+          <div className="rounded-xl p-3.5 space-y-1.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold" style={{ color: 'var(--muted)' }}>YOU RECEIVE (vault shares)</span>
+              <span className="text-xs font-semibold" style={{ color: 'var(--muted)' }}>YOU RECEIVE ON ETHEREUM</span>
               {loading && (
                 <div className="w-3 h-3 rounded-full border-2 animate-spin-slow"
                   style={{ borderColor: 'var(--blue)', borderTopColor: 'transparent' }} />
@@ -301,95 +363,89 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
             </div>
             <div className="flex items-baseline gap-1.5">
               <span className="text-xl font-extrabold" style={{ color: loading ? 'var(--muted)' : 'var(--text)' }}>
-                {loading ? '...' : outputAmount ?? '0.0000'}
+                {loading ? '...' : outputAmt ?? '0.000000'}
               </span>
               <span className="text-sm font-bold" style={{ color: vault.color }}>
-                {vault.shareToken}
+                {vault.outputToken.symbol}
               </span>
             </div>
-            {minOutputAmount && !loading && (
+            {minAmt && !loading && (
               <div className="text-xs" style={{ color: 'var(--muted)' }}>
-                Min received: {minOutputAmount} {vault.shareToken}
+                Min {minAmt} {vault.outputToken.symbol}, then deposited into {vault.name}
               </div>
             )}
           </div>
 
-          {/* Quote details */}
+          {/* Quote breakdown */}
           {quote && !loading && (
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid grid-cols-2 gap-2">
               <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
-                <div style={{ color: 'var(--muted)' }} className="mb-0.5">Bridge fee</div>
-                <div className="font-bold" style={{ color: 'var(--text)' }}>
-                  {feeUsd ? `~$${parseFloat(feeUsd).toFixed(4)}` : '--'}
+                <div className="text-xs mb-0.5" style={{ color: 'var(--muted)' }}>Bridge fee</div>
+                <div className="text-sm font-bold" style={{ color: 'var(--text)' }}>
+                  {feeUsd ? `~$${parseFloat(feeUsd).toFixed(4)}` : 'Free'}
                 </div>
               </div>
               <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
-                <div style={{ color: 'var(--muted)' }} className="mb-0.5">Fill time</div>
-                <div className="font-bold" style={{ color: 'var(--green)' }}>
+                <div className="text-xs mb-0.5" style={{ color: 'var(--muted)' }}>Est. fill time</div>
+                <div className="text-sm font-bold" style={{ color: 'var(--green)' }}>
                   ~{fillTime ?? 2}s
                 </div>
               </div>
             </div>
           )}
 
+          {/* Quote error */}
           {quoteError && (
-            <div className="text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(255,100,100,0.1)', color: '#ff8080' }}>
+            <div className="text-xs px-3 py-2.5 rounded-lg leading-relaxed"
+              style={{ background: 'rgba(255,100,100,0.08)', color: '#ff8888', border: '1px solid rgba(255,100,100,0.15)' }}>
               {quoteError}
             </div>
           )}
 
-          {/* Success state */}
+          {/* Tx error */}
+          {txStatus === 'error' && !quoteError && (
+            <div className="text-xs px-3 py-2.5 rounded-lg"
+              style={{ background: 'rgba(255,100,100,0.08)', color: '#ff8888', border: '1px solid rgba(255,100,100,0.15)' }}>
+              Transaction rejected or failed. Try again below.
+            </div>
+          )}
+
+          {/* Success */}
           {txStatus === 'success' && (
             <div className="rounded-xl p-4 text-center space-y-2"
-              style={{ background: 'var(--green-dim)', border: '1px solid rgba(90,200,120,0.3)' }}>
-              <div className="text-2xl">✓</div>
-              <div className="font-bold text-sm" style={{ color: 'var(--green)' }}>Deposit submitted!</div>
+              style={{ background: 'var(--green-dim)', border: '1px solid rgba(90,200,120,0.25)' }}>
+              <div style={{ fontSize: 24 }}>✓</div>
+              <div className="font-bold text-sm" style={{ color: 'var(--green)' }}>Bridge submitted!</div>
+              <div className="text-xs" style={{ color: 'var(--muted)' }}>
+                {vault.outputToken.symbol} arriving on Ethereum in ~{fillTime ?? 2}s
+              </div>
               {txHash && (
                 <a href={`https://etherscan.io/tx/${txHash}`} target="_blank" rel="noreferrer"
-                  className="text-xs underline" style={{ color: 'var(--muted-light)' }}>
+                  className="text-xs underline block" style={{ color: 'var(--muted-light)' }}>
                   View on Etherscan
                 </a>
               )}
             </div>
           )}
 
-          {/* CTA Button */}
+          {/* CTA button */}
           {txStatus !== 'success' && (
             <button
-              onClick={address ? handleDeposit : undefined}
-              disabled={!quote || loading || txStatus !== 'idle'}
-              className="w-full py-3.5 rounded-xl font-bold text-sm transition-all active:scale-95"
-              style={!address
-                ? { background: 'var(--border)', color: 'var(--muted)', cursor: 'not-allowed' }
-                : !quote || loading
-                  ? { background: 'var(--border)', color: 'var(--muted)', cursor: 'not-allowed' }
-                  : { background: vault.color, color: '#fff', cursor: 'pointer' }
-              }>
-              {!address
-                ? 'Connect wallet to deposit'
-                : loading
-                  ? 'Fetching quote...'
-                  : txStatus === 'switching'
-                    ? `Switching to ${selectedChain.name}...`
-                    : txStatus === 'approving'
-                      ? 'Approving token...'
-                      : txStatus === 'depositing'
-                        ? 'Submitting deposit...'
-                        : txStatus === 'error'
-                          ? 'Error, try again'
-                          : needsChainSwitch
-                            ? `Switch to ${selectedChain.name} and deposit`
-                            : !quote
-                              ? 'Enter amount to get quote'
-                              : `Deposit into ${vault.name}`
+              onClick={canDeposit ? handleDeposit : undefined}
+              disabled={!canDeposit}
+              className="w-full py-3.5 rounded-xl font-bold text-sm transition-all active:scale-[0.98]"
+              style={canDeposit
+                ? { background: vault.color, color: '#fff', cursor: 'pointer' }
+                : { background: 'var(--border)', color: 'var(--muted)', cursor: 'not-allowed' }
               }
+            >
+              {buttonLabel}
             </button>
           )}
 
-          {/* Disclaimer */}
           <p className="text-center text-[10px] leading-relaxed" style={{ color: 'var(--muted)' }}>
-            Not available to U.S. persons or restricted jurisdictions. Not financial advice.
-            Vault deposits have a 72h withdrawal window.
+            Not available to U.S. persons or restricted jurisdictions.
+            Vault deposits subject to 72h withdrawal period.
           </p>
         </div>
       </div>
