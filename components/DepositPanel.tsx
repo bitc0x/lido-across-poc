@@ -235,8 +235,11 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
               <span className="font-bold text-base" style={{ color: 'var(--text)' }}>
                 Deposit into {vault.name}
               </span>
-              <span className="text-xs font-bold px-1.5 py-0.5 rounded"
+              <span className="flex items-center gap-1 text-xs font-bold px-1.5 py-0.5 rounded"
                 style={{ background: 'var(--orange-dim)', color: 'var(--orange)' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="https://s3.coinmarketcap.com/static-gravity/image/54490f7ee08a4cb185c13049500dc279.png"
+                  alt="" width={13} height={13} style={{ borderRadius: '50%' }} />
                 via Across
               </span>
             </div>
