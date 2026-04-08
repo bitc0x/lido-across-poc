@@ -1,32 +1,29 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import DepositPanel from './DepositPanel'
 import { VAULTS } from '@/lib/chains'
 
 type VaultKey = 'ETH' | 'USD'
 
-const VAULT_DETAILS = {
+interface LiveStats { apy: string; tvl: string }
+interface VaultStats { eth: LiveStats; usd: LiveStats }
+
+const STATIC_DETAILS = {
   ETH: {
-    apy: '8.4',
-    tvl: '$142.6M',
     curator: 'Mellow',
     curatorUrl: 'https://mellow.finance',
     performanceFee: '10%',
     platformFee: '1%',
-    deployed: '02 Feb 2026',
     auditor: 'Nethermind',
     withdrawal: 'Up to 72 hours',
     etherscan: 'https://etherscan.io/address/0xBBFC8683C8fE8cF73777feDE7ab9574935fea0A4',
   },
   USD: {
-    apy: '11.2',
-    tvl: '$89.3M',
     curator: 'Mellow',
     curatorUrl: 'https://mellow.finance',
     performanceFee: '10%',
     platformFee: '1%',
-    deployed: '02 Feb 2026',
     auditor: 'Nethermind',
     withdrawal: 'Up to 72 hours',
     etherscan: 'https://etherscan.io/address/0x4Ce1ac8F43E0E5BD7A346A98aF777bF8fbeA1981',
@@ -42,14 +39,29 @@ function ShieldIcon() {
   )
 }
 
+function StatBox({ label, value, color, loading }: { label: string; value: string; color: string; loading: boolean }) {
+  return (
+    <div className="rounded-xl p-3" style={{ background: 'var(--bg)' }}>
+      <div className="text-xs font-medium mb-0.5" style={{ color: 'var(--muted)' }}>{label}</div>
+      {loading ? (
+        <div className="h-7 w-20 rounded shimmer mt-1" />
+      ) : (
+        <div className="text-2xl font-extrabold" style={{ color }}>{value}</div>
+      )}
+    </div>
+  )
+}
+
 interface VaultCardProps {
   vaultKey: VaultKey
+  stats: LiveStats
+  statsLoading: boolean
   onDeposit: (key: VaultKey) => void
 }
 
-function VaultCard({ vaultKey, onDeposit }: VaultCardProps) {
+function VaultCard({ vaultKey, stats, statsLoading, onDeposit }: VaultCardProps) {
   const vault = VAULTS[vaultKey]
-  const details = VAULT_DETAILS[vaultKey]
+  const details = STATIC_DETAILS[vaultKey]
   const [tab, setTab] = useState<'info' | 'assets'>('info')
 
   const acceptedAssets = vaultKey === 'ETH'
@@ -61,10 +73,10 @@ function VaultCard({ vaultKey, onDeposit }: VaultCardProps) {
     : ['USDC, USDT on 15+ chains', 'ETH, WETH, DAI on any chain', 'WBTC, stablecoins via swap']
 
   return (
-    <div className="rounded-2xl overflow-hidden transition-all hover:border-opacity-80"
+    <div className="rounded-2xl overflow-hidden"
       style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
 
-      {/* Card header */}
+      {/* Header */}
       <div className="p-5 pb-4" style={{ borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-start justify-between mb-3">
           <div>
@@ -86,20 +98,20 @@ function VaultCard({ vaultKey, onDeposit }: VaultCardProps) {
           </div>
         </div>
 
-        {/* APY + TVL */}
+        {/* APY + TVL - live */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl p-3" style={{ background: 'var(--bg)' }}>
-            <div className="text-xs font-medium mb-0.5" style={{ color: 'var(--muted)' }}>APY* (7d avg.)</div>
-            <div className="text-2xl font-extrabold" style={{ color: 'var(--green)' }}>
-              {details.apy}%
-            </div>
-          </div>
-          <div className="rounded-xl p-3" style={{ background: 'var(--bg)' }}>
-            <div className="text-xs font-medium mb-0.5" style={{ color: 'var(--muted)' }}>TVL</div>
-            <div className="text-2xl font-extrabold" style={{ color: 'var(--text)' }}>
-              {details.tvl}
-            </div>
-          </div>
+          <StatBox
+            label="APY* (7d avg.)"
+            value={stats.apy}
+            color="var(--green)"
+            loading={statsLoading}
+          />
+          <StatBox
+            label="TVL"
+            value={stats.tvl}
+            color="var(--text)"
+            loading={statsLoading}
+          />
         </div>
       </div>
 
@@ -109,7 +121,7 @@ function VaultCard({ vaultKey, onDeposit }: VaultCardProps) {
           <button key={t} onClick={() => setTab(t)}
             className="flex-1 py-2.5 text-xs font-semibold transition-all"
             style={tab === t
-              ? { color: 'var(--blue)', borderBottom: `2px solid var(--blue)` }
+              ? { color: 'var(--blue)', borderBottom: '2px solid var(--blue)' }
               : { color: 'var(--muted)' }
             }>
             {t === 'info' ? 'Details' : 'Accepted Assets'}
@@ -174,7 +186,7 @@ function VaultCard({ vaultKey, onDeposit }: VaultCardProps) {
         )}
       </div>
 
-      {/* Action buttons */}
+      {/* Actions */}
       <div className="px-4 pb-4 flex gap-2">
         <button
           onClick={() => onDeposit(vaultKey)}
@@ -197,7 +209,21 @@ function VaultCard({ vaultKey, onDeposit }: VaultCardProps) {
 
 export default function EarnSection() {
   const [activeDeposit, setActiveDeposit] = useState<VaultKey | null>(null)
+  const [stats, setStats] = useState<VaultStats | null>(null)
+  const [statsLoading, setStatsLoading] = useState(true)
 
+  useEffect(() => {
+    fetch('/api/vault-stats')
+      .then(r => r.json())
+      .then((data: VaultStats) => {
+        setStats(data)
+        setStatsLoading(false)
+      })
+      .catch(() => setStatsLoading(false))
+  }, [])
+
+  const ethStats  = stats?.eth  ?? { apy: '--', tvl: '--' }
+  const usdStats  = stats?.usd  ?? { apy: '--', tvl: '--' }
   const activeVault = activeDeposit ? VAULTS[activeDeposit] : null
 
   return (
@@ -224,19 +250,17 @@ export default function EarnSection() {
         </div>
       </div>
 
-      {/* Live vaults */}
+      {/* Vault cards */}
       <div className="grid md:grid-cols-2 gap-5 animate-fade-up stagger-2">
-        <VaultCard vaultKey="ETH" onDeposit={setActiveDeposit} />
-        <VaultCard vaultKey="USD" onDeposit={setActiveDeposit} />
+        <VaultCard vaultKey="ETH" stats={ethStats} statsLoading={statsLoading} onDeposit={setActiveDeposit} />
+        <VaultCard vaultKey="USD" stats={usdStats} statsLoading={statsLoading} onDeposit={setActiveDeposit} />
       </div>
 
-      {/* Disclaimer */}
       <p className="text-center text-xs mt-8 leading-relaxed max-w-2xl mx-auto" style={{ color: 'var(--muted)' }}>
-        * APY figures are estimates and subject to change. Not available to U.S. persons.
+        * APY figures are estimates, not guaranteed, and subject to change. Not available to U.S. persons.
         Vault deposits subject to 72-hour withdrawal window. This is a proof-of-concept demo.
       </p>
 
-      {/* Deposit Modal */}
       {activeDeposit && activeVault && (
         <DepositPanel
           vault={activeVault}
