@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams
-  params.set('integratorId', '0x00ce')
+  params.set('integratorId', '0x00f1')
 
   const url = `https://app.across.to/api/swap/approval?${params.toString()}`
 
