@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useAccount, useSendTransaction, useSwitchChain } from 'wagmi'
+import { useAccount, useSendTransaction, useSwitchChain, useBalance, useReadContracts } from 'wagmi'
 import { parseUnits, formatUnits } from 'viem'
 import { SUPPORTED_CHAINS, type ChainInfo, type TokenInfo } from '@/lib/chains'
 
@@ -26,20 +26,18 @@ interface AcrossQuote {
   approvalTxns?: Array<{ to: string; data: string; chainId: number }>
 }
 
-function ChainIcon({ logoUrl, color, size = 18 }: { logoUrl: string; color: string; size?: number }) {
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={logoUrl}
-      alt=""
-      width={size}
-      height={size}
-      style={{ borderRadius: '50%', flexShrink: 0, objectFit: 'cover', background: color }}
-    />
-  )
-}
+const ERC20_ABI = [
+  {
+    type: 'function' as const,
+    name: 'balanceOf',
+    stateMutability: 'view' as const,
+    inputs: [{ name: 'account', type: 'address' as const }],
+    outputs: [{ name: '', type: 'uint256' as const }],
+  },
+]
 
-// Safely parse user input without throwing on excess decimal places
+const ACROSS_LOGO = 'https://s3.coinmarketcap.com/static-gravity/image/54490f7ee08a4cb185c13049500dc279.png'
+
 function safeParseUnits(value: string, decimals: number): bigint | null {
   try {
     const parts = value.split('.')
@@ -50,6 +48,31 @@ function safeParseUnits(value: string, decimals: number): bigint | null {
   } catch {
     return null
   }
+}
+
+function formatBalance(raw: bigint, decimals: number): string {
+  const n = Number(formatUnits(raw, decimals))
+  if (n === 0) return '0'
+  if (n < 0.0001) return '<0.0001'
+  if (n < 1) return n.toFixed(4).replace(/\.?0+$/, '')
+  if (n < 1000) return n.toFixed(3).replace(/\.?0+$/, '')
+  return n.toLocaleString('en-US', { maximumFractionDigits: 2 })
+}
+
+function ChainLogo({ logoUrl, color, size = 18 }: { logoUrl: string; color: string; size?: number }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={logoUrl} alt="" width={size} height={size}
+      style={{ borderRadius: '50%', flexShrink: 0, objectFit: 'cover', background: color }} />
+  )
+}
+
+function TokenLogo({ logoUrl, size = 16 }: { logoUrl: string; size?: number }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={logoUrl} alt="" width={size} height={size}
+      style={{ borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
+  )
 }
 
 export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
@@ -71,7 +94,55 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
   const chainRef = useRef<HTMLDivElement>(null)
   const tokenRef = useRef<HTMLDivElement>(null)
 
-  // Close dropdowns on outside click
+  // --- Balance reading ---
+  const erc20Tokens = selectedChain.tokens.filter(t => !t.isNative)
+
+  const { data: nativeBal } = useBalance({
+    address,
+    chainId: selectedChain.id,
+    query: { enabled: !!address, refetchInterval: 15_000 },
+  })
+
+  const { data: erc20Bals } = useReadContracts({
+    contracts: erc20Tokens.map(t => ({
+      address: t.address as `0x${string}`,
+      abi: ERC20_ABI,
+      functionName: 'balanceOf' as const,
+      args: address ? [address as `0x${string}`] : undefined,
+      chainId: selectedChain.id,
+    })),
+    query: { enabled: !!address && erc20Tokens.length > 0, refetchInterval: 15_000 },
+  })
+
+  type ERC20Result = { status: 'success'; result: bigint } | { status: 'failure'; error: Error }
+  const typedErc20Bals = erc20Bals as ERC20Result[] | undefined
+
+  // Build symbol -> formatted balance map
+  const balances: Record<string, string> = {}
+  if (address) {
+    selectedChain.tokens.forEach(t => {
+      if (t.isNative && nativeBal) {
+        balances[t.symbol] = formatBalance(nativeBal.value, t.decimals)
+      } else if (!t.isNative && typedErc20Bals) {
+        const idx = erc20Tokens.findIndex(e => e.symbol === t.symbol)
+        const res = typedErc20Bals[idx]
+        if (res && res.status === 'success' && res.result != null) {
+          balances[t.symbol] = formatBalance(res.result as bigint, t.decimals)
+        }
+      }
+    })
+  }
+
+  const selectedBalance = balances[selectedToken.symbol]
+  const rawSelectedBalance = selectedToken.isNative
+    ? nativeBal?.value
+    : (() => {
+        const idx = erc20Tokens.findIndex(e => e.symbol === selectedToken.symbol)
+        const res = typedErc20Bals?.[idx]
+        return (res && res.status === 'success' && res.result != null) ? (res.result as bigint) : undefined
+      })()
+
+  // --- Dropdown close on outside click ---
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (chainRef.current && !chainRef.current.contains(e.target as Node)) setChainOpen(false)
@@ -81,73 +152,49 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Reset token + state when chain changes
   useEffect(() => {
     setSelectedToken(selectedChain.tokens[0])
-    setQuote(null)
-    setQuoteError('')
-    setTxStatus('idle')
+    setQuote(null); setQuoteError(''); setTxStatus('idle')
   }, [selectedChain])
 
-  // Reset quote when token or amount changes, and clear error state so user can retry
   useEffect(() => {
-    setQuote(null)
-    setQuoteError('')
+    setQuote(null); setQuoteError('')
     if (txStatus === 'error') setTxStatus('idle')
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedToken, amount])
 
+  // --- Quote fetching ---
   const fetchQuote = useCallback(async () => {
-    if (!amount || parseFloat(amount) <= 0) {
-      setQuote(null)
-      setQuoteError('')
-      return
-    }
-
+    if (!amount || parseFloat(amount) <= 0) { setQuote(null); setQuoteError(''); return }
     const amountIn = safeParseUnits(amount, selectedToken.decimals)
-    if (!amountIn || amountIn <= BigInt(0)) {
-      setQuoteError('Invalid amount')
-      return
-    }
+    if (!amountIn || amountIn <= BigInt(0)) { setQuoteError('Invalid amount'); return }
 
     const recipient = address || '0x0000000000000000000000000000000000000001'
     const depositor = address || '0x0000000000000000000000000000000000000001'
-    const inputToken = selectedToken.isNative
-      ? '0x0000000000000000000000000000000000000000'
-      : selectedToken.address
+    const inputToken = selectedToken.isNative ? '0x0000000000000000000000000000000000000000' : selectedToken.address
 
-    setLoading(true)
-    setQuoteError('')
+    setLoading(true); setQuoteError('')
     try {
       const params = new URLSearchParams({
-        inputToken,
-        outputToken: vault.outputToken.address,
-        originChainId: String(selectedChain.id),
-        destinationChainId: '1',
-        amount: amountIn.toString(),
-        recipient,
-        depositor,
+        inputToken, outputToken: vault.outputToken.address,
+        originChainId: String(selectedChain.id), destinationChainId: '1',
+        amount: amountIn.toString(), recipient, depositor,
       })
       const res = await fetch(`/api/across-quote?${params}`)
       const data = await res.json()
       if (data.message || data.error || data.code) {
         const raw: string = data.message || data.error || ''
-        const friendly = raw.toLowerCase().includes('too low') || raw.toLowerCase().includes('minimum')
+        const msg = raw.toLowerCase().includes('too low') || raw.toLowerCase().includes('minimum')
           ? 'Amount too low for this route. Try a larger amount.'
           : raw.toLowerCase().includes('not supported') || raw.toLowerCase().includes('route')
-          ? 'This route is not supported. Try a different token or chain.'
+          ? 'Route not supported. Try a different token or chain.'
           : 'Quote unavailable. Try a different amount or token.'
-        setQuoteError(friendly)
-        setQuote(null)
+        setQuoteError(msg); setQuote(null)
       } else {
-        setQuote(data)
-        setQuoteError('')
+        setQuote(data); setQuoteError('')
       }
-    } catch {
-      setQuoteError('Network error. Please try again.')
-    } finally {
-      setLoading(false)
-    }
+    } catch { setQuoteError('Network error. Please try again.') }
+    finally { setLoading(false) }
   }, [amount, selectedToken, selectedChain, vault, address])
 
   useEffect(() => {
@@ -155,6 +202,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
     return () => clearTimeout(t)
   }, [fetchQuote])
 
+  // --- Transaction ---
   const handleDeposit = async () => {
     if (!quote || !address) return
     try {
@@ -165,11 +213,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
       if (quote.approvalTxns?.length) {
         setTxStatus('approving')
         for (const appr of quote.approvalTxns) {
-          await sendTransactionAsync({
-            to: appr.to as `0x${string}`,
-            data: appr.data as `0x${string}`,
-            chainId: appr.chainId,
-          })
+          await sendTransactionAsync({ to: appr.to as `0x${string}`, data: appr.data as `0x${string}`, chainId: appr.chainId })
         }
       }
       setTxStatus('depositing')
@@ -182,10 +226,15 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
       })
       setTxHash(hash)
       setTxStatus('success')
-    } catch (e: unknown) {
-      console.error(e)
-      setTxStatus('error')
-    }
+    } catch (e) { console.error(e); setTxStatus('error') }
+  }
+
+  const handleMax = () => {
+    if (!rawSelectedBalance) return
+    // Leave a small buffer for native ETH gas
+    const buf = selectedToken.isNative ? parseUnits('0.001', 18) : BigInt(0)
+    const max = rawSelectedBalance > buf ? rawSelectedBalance - buf : rawSelectedBalance
+    setAmount(Number(formatUnits(max, selectedToken.decimals)).toFixed(6).replace(/\.?0+$/, ''))
   }
 
   const outputAmt = quote
@@ -196,35 +245,26 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
     : null
   const fillTime = quote?.expectedFillTime ?? null
   const feeUsd = quote?.fees?.total?.amountUsd ?? null
-
   const needsChainSwitch = !!address && walletChain?.id !== selectedChain.id
   const isProcessing = txStatus === 'switching' || txStatus === 'approving' || txStatus === 'depositing'
   const canDeposit = !!quote && !loading && !isProcessing && !quoteError && !!address
 
-  const buttonLabel = !address
-    ? 'Connect wallet to deposit'
-    : loading
-    ? 'Fetching quote...'
-    : isProcessing
-    ? txStatus === 'switching'
-      ? `Switching to ${selectedChain.name}...`
-      : txStatus === 'approving'
-      ? 'Approving token...'
-      : 'Submitting bridge...'
-    : quoteError
-    ? 'Quote unavailable'
-    : !quote
-    ? 'Enter an amount'
-    : needsChainSwitch
-    ? `Switch to ${selectedChain.name} and deposit`
+  const buttonLabel = !address ? 'Connect wallet to deposit'
+    : loading ? 'Fetching quote...'
+    : isProcessing ? (
+        txStatus === 'switching' ? `Switching to ${selectedChain.name}...`
+        : txStatus === 'approving' ? 'Approving token...'
+        : 'Submitting bridge...'
+      )
+    : quoteError ? 'Quote unavailable'
+    : !quote ? 'Enter an amount'
+    : needsChainSwitch ? `Switch to ${selectedChain.name} and deposit`
     : `Deposit into ${vault.name}`
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(6px)' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="w-full max-w-md rounded-2xl overflow-hidden animate-fade-up"
         style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
 
@@ -237,9 +277,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
               </span>
               <span className="flex items-center gap-1 text-xs font-bold px-1.5 py-0.5 rounded"
                 style={{ background: 'var(--orange-dim)', color: 'var(--orange)' }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="https://s3.coinmarketcap.com/static-gravity/image/54490f7ee08a4cb185c13049500dc279.png"
-                  alt="" width={13} height={13} style={{ borderRadius: '50%' }} />
+                <TokenLogo logoUrl={ACROSS_LOGO} size={13} />
                 via Across
               </span>
             </div>
@@ -262,13 +300,11 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
           <div>
             <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--muted)' }}>FROM CHAIN</label>
             <div className="relative" ref={chainRef}>
-              <button
-                onClick={() => { setChainOpen(v => !v); setTokenOpen(false) }}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors"
-                style={{ background: 'var(--bg)', border: `1px solid ${chainOpen ? 'var(--blue)' : 'var(--border)'}`, color: 'var(--text)' }}
-              >
+              <button onClick={() => { setChainOpen(v => !v); setTokenOpen(false) }}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold"
+                style={{ background: 'var(--bg)', border: `1px solid ${chainOpen ? 'var(--blue)' : 'var(--border)'}`, color: 'var(--text)' }}>
                 <div className="flex items-center gap-2">
-                  <ChainIcon logoUrl={selectedChain.logoUrl} color={selectedChain.color} />
+                  <ChainLogo logoUrl={selectedChain.logoUrl} color={selectedChain.color} />
                   {selectedChain.name}
                 </div>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -281,18 +317,14 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
                   style={{ background: '#0d1222', border: '1px solid var(--border-hover)' }}>
                   <div className="max-h-52 overflow-y-auto">
                     {SUPPORTED_CHAINS.map(c => (
-                      <button key={c.id}
-                        onClick={() => { setSelectedChain(c); setChainOpen(false) }}
+                      <button key={c.id} onClick={() => { setSelectedChain(c); setChainOpen(false) }}
                         className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-white/5 transition-colors"
                         style={{
                           background: selectedChain.id === c.id ? 'var(--blue-dim)' : 'transparent',
                           color: selectedChain.id === c.id ? 'var(--blue)' : 'var(--text)',
                         }}>
-                        <ChainIcon logoUrl={c.logoUrl} color={c.color} />
+                        <ChainLogo logoUrl={c.logoUrl} color={c.color} />
                         {c.name}
-                        <span className="ml-auto text-xs" style={{ color: 'var(--muted)' }}>
-                          {c.tokens.length} tokens
-                        </span>
                       </button>
                     ))}
                   </div>
@@ -303,17 +335,23 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
 
           {/* Token + Amount */}
           <div>
-            <label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--muted)' }}>YOU SEND</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold" style={{ color: 'var(--muted)' }}>YOU SEND</label>
+              {address && selectedBalance !== undefined && (
+                <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                  Balance: <span style={{ color: 'var(--text)', fontWeight: 600 }}>{selectedBalance}</span>
+                  {' '}{selectedToken.symbol}
+                </span>
+              )}
+            </div>
             <div className="flex gap-2">
+              {/* Token selector */}
               <div className="relative shrink-0" ref={tokenRef}>
-                <button
-                  onClick={() => { setTokenOpen(v => !v); setChainOpen(false) }}
+                <button onClick={() => { setTokenOpen(v => !v); setChainOpen(false) }}
                   className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap"
-                  style={{ background: 'var(--bg)', border: `1px solid ${tokenOpen ? 'var(--blue)' : 'var(--border)'}`, color: 'var(--text)' }}
-                >
+                  style={{ background: 'var(--bg)', border: `1px solid ${tokenOpen ? 'var(--blue)' : 'var(--border)'}`, color: 'var(--text)' }}>
                   <div className="flex items-center gap-1.5">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={selectedToken.logoUrl} alt="" width={16} height={16} style={{ borderRadius: '50%', objectFit: 'cover' }} />
+                    <TokenLogo logoUrl={selectedToken.logoUrl} />
                     {selectedToken.symbol}
                   </div>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -323,37 +361,51 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
                 </button>
                 {tokenOpen && (
                   <div className="absolute z-20 top-full mt-1 rounded-xl overflow-hidden shadow-2xl"
-                    style={{ background: '#0d1222', border: '1px solid var(--border-hover)', minWidth: 160 }}>
+                    style={{ background: '#0d1222', border: '1px solid var(--border-hover)', minWidth: 220 }}>
                     {selectedChain.tokens.map(t => (
-                      <button key={t.symbol}
-                        onClick={() => { setSelectedToken(t); setTokenOpen(false) }}
+                      <button key={t.symbol} onClick={() => { setSelectedToken(t); setTokenOpen(false) }}
                         className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-white/5 transition-colors"
                         style={{
                           background: selectedToken.symbol === t.symbol ? 'var(--blue-dim)' : 'transparent',
                           color: selectedToken.symbol === t.symbol ? 'var(--blue)' : 'var(--text)',
                         }}>
-                        <span className="flex items-center gap-2">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={t.logoUrl} alt="" width={16} height={16} style={{ borderRadius: '50%', objectFit: 'cover' }} />
-                          <span className="font-bold">{t.symbol}</span>
-                        </span>
-                        <span className="text-xs ml-auto" style={{ color: 'var(--muted)' }}>{t.name}</span>
+                        <TokenLogo logoUrl={t.logoUrl} />
+                        <span className="font-bold">{t.symbol}</span>
+                        <span className="text-xs" style={{ color: 'var(--muted)' }}>{t.name}</span>
+                        {/* Balance on the right */}
+                        {address && balances[t.symbol] !== undefined && (
+                          <span className="ml-auto text-xs font-semibold tabular-nums"
+                            style={{ color: balances[t.symbol] === '0' ? 'var(--muted)' : 'var(--text)' }}>
+                            {balances[t.symbol]}
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
                 )}
               </div>
-              <input
-                type="number"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={amount}
-                onChange={e => setAmount(e.target.value)}
-                className="flex-1 px-3 py-2.5 rounded-xl text-sm font-semibold outline-none"
-                style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', minWidth: 0, transition: 'border-color 0.15s' }}
-                onFocus={e => (e.target.style.borderColor = 'var(--blue)')}
-                onBlur={e => (e.target.style.borderColor = 'var(--border)')}
-              />
+
+              {/* Amount + MAX */}
+              <div className="flex-1 relative">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={e => setAmount(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl text-sm font-semibold outline-none"
+                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', paddingRight: rawSelectedBalance ? '52px' : '12px', transition: 'border-color 0.15s' }}
+                  onFocus={e => (e.target.style.borderColor = 'var(--blue)')}
+                  onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+                />
+                {rawSelectedBalance && rawSelectedBalance > BigInt(0) && (
+                  <button onClick={handleMax}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold px-1.5 py-0.5 rounded transition-opacity hover:opacity-70"
+                    style={{ background: 'var(--blue-dim)', color: 'var(--blue)' }}>
+                    MAX
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -394,7 +446,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
             )}
           </div>
 
-          {/* Quote breakdown */}
+          {/* Quote details */}
           {quote && !loading && (
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
@@ -405,22 +457,18 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
               </div>
               <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
                 <div className="text-xs mb-0.5" style={{ color: 'var(--muted)' }}>Est. fill time</div>
-                <div className="text-sm font-bold" style={{ color: 'var(--green)' }}>
-                  ~{fillTime ?? 2}s
-                </div>
+                <div className="text-sm font-bold" style={{ color: 'var(--green)' }}>~{fillTime ?? 2}s</div>
               </div>
             </div>
           )}
 
-          {/* Quote error */}
+          {/* Errors */}
           {quoteError && (
             <div className="text-xs px-3 py-2.5 rounded-lg leading-relaxed"
               style={{ background: 'rgba(255,100,100,0.08)', color: '#ff8888', border: '1px solid rgba(255,100,100,0.15)' }}>
               {quoteError}
             </div>
           )}
-
-          {/* Tx error */}
           {txStatus === 'error' && !quoteError && (
             <div className="text-xs px-3 py-2.5 rounded-lg"
               style={{ background: 'rgba(255,100,100,0.08)', color: '#ff8888', border: '1px solid rgba(255,100,100,0.15)' }}>
@@ -446,7 +494,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
             </div>
           )}
 
-          {/* CTA button */}
+          {/* CTA */}
           {txStatus !== 'success' && (
             <button
               onClick={canDeposit ? handleDeposit : undefined}
@@ -455,8 +503,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
               style={canDeposit
                 ? { background: vault.color, color: '#fff', cursor: 'pointer' }
                 : { background: 'var(--border)', color: 'var(--muted)', cursor: 'not-allowed' }
-              }
-            >
+              }>
               {buttonLabel}
             </button>
           )}
