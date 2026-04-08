@@ -53,6 +53,15 @@ export default function Overview({ onGetStarted }: OverviewProps) {
 
       {/* HERO */}
       <section className="text-center space-y-6 animate-fade-up stagger-1">
+        <div className="inline-flex items-center gap-3 mb-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="https://europe1.discourse-cdn.com/flex013/uploads/lido/original/1X/8d3e77d0e4936c97f2b6189ab18370bd88fbe91e.png"
+            alt="Lido" width={40} height={40} style={{ borderRadius: '50%' }} />
+          <span style={{ color: 'var(--border-hover)', fontSize: 20 }}>x</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="https://across.to/logo-small.png"
+            alt="Across" width={40} height={40} style={{ borderRadius: '50%', background: '#ff6640' }} />
+        </div>
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold"
           style={{ background: 'var(--blue-dim)', color: 'var(--blue)', border: '1px solid rgba(0,163,255,0.2)' }}>
           Proof of Concept
@@ -184,7 +193,9 @@ export default function Overview({ onGetStarted }: OverviewProps) {
           {SUPPORTED_CHAINS.map(chain => (
             <div key={chain.id} className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold"
               style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--text)' }}>
-              <span className="w-2.5 h-2.5 rounded-full" style={{ background: chain.color }} />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={chain.logoUrl} alt={chain.name} width={18} height={18}
+                style={{ borderRadius: '50%', objectFit: 'cover', background: chain.color }} />
               {chain.name}
             </div>
           ))}
