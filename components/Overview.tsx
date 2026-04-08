@@ -17,7 +17,7 @@ const STEPS = [
   {
     num: '01',
     title: 'Choose your origin',
-    body: 'Select any chain and any supported asset. USDC on Arbitrum, ETH on Base, WBTC on Polygon — anything works.',
+    body: 'Select any chain and any supported asset. USDC on Arbitrum, ETH on Base, WBTC on Polygon. Anything works.',
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
@@ -65,7 +65,7 @@ export default function Overview({ onGetStarted }: OverviewProps) {
 
         <p className="text-lg max-w-2xl mx-auto leading-relaxed" style={{ color: 'var(--muted-light)' }}>
           Today, EarnETH and EarnUSD only accept a handful of assets on Ethereum mainnet.
-          Across Protocol unlocks deposits from any supported chain with any supported token — in a single transaction.
+          Across Protocol unlocks deposits from any supported chain with any supported token, in a single transaction.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -127,7 +127,7 @@ export default function Overview({ onGetStarted }: OverviewProps) {
             'Any liquid ERC-20: ETH, USDC, USDT, WBTC, DAI, and more',
             'Across swaps to the correct vault input automatically',
             'One transaction from origin to vault deposit',
-            'Zero fees to the user — relayer competition drives costs to zero',
+            'Zero fees to the user. Relayer competition drives costs to zero',
           ].map((item, i) => (
             <div key={i} className="flex items-start gap-3 text-sm" style={{ color: 'var(--muted-light)' }}>
               <span className="mt-0.5 shrink-0" style={{ color: 'var(--green)' }}>
@@ -204,7 +204,7 @@ export default function Overview({ onGetStarted }: OverviewProps) {
         <p className="text-sm leading-relaxed max-w-3xl" style={{ color: 'var(--muted-light)' }}>
           The Lido Earn vaults are competing for liquidity that lives on L2s and in assets outside their whitelist.
           Across turns every supported chain into a direct deposit channel. Users with USDC on Arbitrum, WBTC on Polygon,
-          or ETH on Base can deposit into EarnETH or EarnUSD in one click — flows that are categorically impossible today.
+          or ETH on Base can deposit into EarnETH or EarnUSD in one click. These are flows that are categorically impossible today.
           Lido builds nothing. Across handles all routing, swapping, and settlement.
         </p>
         <div className="flex flex-wrap gap-3 pt-2">
