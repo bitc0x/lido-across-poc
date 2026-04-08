@@ -98,7 +98,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
     }
 
     const amountIn = safeParseUnits(amount, selectedToken.decimals)
-    if (!amountIn || amountIn <= 0n) {
+    if (!amountIn || amountIn <= BigInt(0)) {
       setQuoteError('Invalid amount')
       return
     }
