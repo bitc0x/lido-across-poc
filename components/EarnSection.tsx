@@ -242,9 +242,9 @@ export default function EarnSection() {
           </div>
           <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold"
             style={{ background: 'var(--orange-dim)', color: 'var(--orange)', border: '1px solid rgba(255,102,64,0.2)' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
-            </svg>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="https://s3.coinmarketcap.com/static-gravity/image/54490f7ee08a4cb185c13049500dc279.png"
+              alt="Across" width={16} height={16} style={{ borderRadius: '50%' }} />
             Powered by Across Swap API
           </div>
         </div>
