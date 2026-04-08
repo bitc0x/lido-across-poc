@@ -376,7 +376,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
                       : txStatus === 'depositing'
                         ? 'Submitting deposit...'
                         : txStatus === 'error'
-                          ? 'Error — try again'
+                          ? 'Error, try again'
                           : needsChainSwitch
                             ? `Switch to ${selectedChain.name} and deposit`
                             : !quote
