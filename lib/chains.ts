@@ -30,6 +30,19 @@ const CHAIN_BASE = 'https://alexandria-blond.vercel.app/assets/chains'
 
 export const SUPPORTED_CHAINS: ChainInfo[] = [
   {
+    id: 1, name: 'Ethereum', shortName: 'ETH', color: '#627EEA',
+    logoUrl: `${CHAIN_BASE}/mainnet.svg`,
+    tokens: [
+      { symbol: 'ETH',   name: 'Ethereum',    address: '0x0000000000000000000000000000000000000000', decimals: 18, isNative: true, logoUrl: LOGOS.ETH },
+      { symbol: 'USDC',  name: 'USD Coin',     address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6,  logoUrl: LOGOS.USDC },
+      { symbol: 'USDT',  name: 'Tether',       address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6,  logoUrl: LOGOS.USDT },
+      { symbol: 'WETH',  name: 'Wrapped ETH',  address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', decimals: 18, logoUrl: LOGOS.ETH },
+      { symbol: 'WBTC',  name: 'Wrapped BTC',  address: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', decimals: 8,  logoUrl: LOGOS.WBTC },
+      { symbol: 'DAI',   name: 'Dai',          address: '0x6B175474E89094C44Da98b954EedeAC495271d0F', decimals: 18, logoUrl: LOGOS.DAI },
+      { symbol: 'wstETH',name: 'Wrapped stETH',address: '0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0', decimals: 18, logoUrl: 'https://github.com/trustwallet/assets/blob/master/blockchains/ethereum/assets/0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0/logo.png?raw=true' },
+    ],
+  },
+  {
     id: 42161, name: 'Arbitrum', shortName: 'ARB', color: '#12AAFF',
     logoUrl: `${CHAIN_BASE}/arbitrum.svg`,
     tokens: [
