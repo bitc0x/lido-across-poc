@@ -59,8 +59,8 @@ export default function Overview({ onGetStarted }: OverviewProps) {
             alt="Lido" width={40} height={40} style={{ borderRadius: '50%' }} />
           <span style={{ color: 'var(--border-hover)', fontSize: 20 }}>x</span>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="https://across.to/logo-small.png"
-            alt="Across" width={40} height={40} style={{ borderRadius: '50%', background: '#ff6640' }} />
+          <img src="https://s3.coinmarketcap.com/static-gravity/image/54490f7ee08a4cb185c13049500dc279.png"
+            alt="Across" width={40} height={40} style={{ borderRadius: '50%' }} />
         </div>
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold"
           style={{ background: 'var(--blue-dim)', color: 'var(--blue)', border: '1px solid rgba(0,163,255,0.2)' }}>
