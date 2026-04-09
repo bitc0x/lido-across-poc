@@ -23,6 +23,7 @@ const LOGOS = {
   USDT:   'https://github.com/trustwallet/assets/blob/master/blockchains/ethereum/assets/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png?raw=true',
   WBTC:   'https://github.com/trustwallet/assets/blob/master/blockchains/ethereum/assets/0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599/logo.png?raw=true',
   DAI:    'https://github.com/trustwallet/assets/blob/master/blockchains/ethereum/assets/0x6B175474E89094C44Da98b954EedeAC495271d0F/logo.png?raw=true',
+  wstETH: 'https://github.com/trustwallet/assets/blob/master/blockchains/ethereum/assets/0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0/logo.png?raw=true',
 }
 
 // Chain logo base URL (from Across /api/chains)
@@ -39,7 +40,7 @@ export const SUPPORTED_CHAINS: ChainInfo[] = [
       { symbol: 'WETH',  name: 'Wrapped ETH',  address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', decimals: 18, logoUrl: LOGOS.ETH },
       { symbol: 'WBTC',  name: 'Wrapped BTC',  address: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', decimals: 8,  logoUrl: LOGOS.WBTC },
       { symbol: 'DAI',   name: 'Dai',          address: '0x6B175474E89094C44Da98b954EedeAC495271d0F', decimals: 18, logoUrl: LOGOS.DAI },
-      { symbol: 'wstETH',name: 'Wrapped stETH',address: '0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0', decimals: 18, logoUrl: 'https://github.com/trustwallet/assets/blob/master/blockchains/ethereum/assets/0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0/logo.png?raw=true' },
+      { symbol: 'wstETH',name: 'Wrapped stETH',address: '0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0', decimals: 18, logoUrl: LOGOS.wstETH },
     ],
   },
   {
