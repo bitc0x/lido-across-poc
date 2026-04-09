@@ -3,7 +3,7 @@
 import '@rainbow-me/rainbowkit/styles.css'
 import { getDefaultConfig, RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit'
 import { WagmiProvider } from 'wagmi'
-import { mainnet, arbitrum, base, optimism, polygon, zkSync, linea, scroll, mode } from 'wagmi/chains'
+import { mainnet, arbitrum, base, optimism, polygon, zkSync, linea, scroll, mode, bsc } from 'wagmi/chains'
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
@@ -34,7 +34,7 @@ const ink = {
 const wagmiConfig = getDefaultConfig({
   appName: 'Lido Earn x Across',
   projectId: 'e6ec1105c1bea07ee25e2ff2cab86514',
-  chains: [mainnet, arbitrum, base, optimism, polygon, zkSync, linea, scroll, mode, worldChain, unichain, ink],
+  chains: [mainnet, arbitrum, base, optimism, polygon, zkSync, linea, scroll, mode, bsc, worldChain, unichain, ink],
   ssr: true,
 })
 
