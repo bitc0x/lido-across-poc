@@ -612,13 +612,13 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
               <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
                 <div className="text-xs mb-0.5" style={{ color: 'var(--muted)' }}>{isDirectDeposit ? 'Fee' : 'Bridge fee'}</div>
                 <div className="text-sm font-bold" style={{ color: 'var(--text)' }}>
-                  {isDirectDeposit ? 'None' : feeUsd ? `~$${parseFloat(feeUsd).toFixed(4)}` : 'Free'}
+                  {isDirectDeposit ? 'Gas only' : feeUsd ? `~$${parseFloat(feeUsd).toFixed(4)}` : 'Free'}
                 </div>
               </div>
               <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
                 <div className="text-xs mb-0.5" style={{ color: 'var(--muted)' }}>Est. fill time</div>
                 <div className="text-sm font-bold" style={{ color: 'var(--green)' }}>
-                  {isDirectDeposit ? 'Instant' : `~${fillTime ?? 2}s`}
+                  {isDirectDeposit ? '~12s' : `~${fillTime ?? 2}s`}
                 </div>
               </div>
             </div>
@@ -645,7 +645,7 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
               <div style={{ fontSize: 24 }}>✓</div>
               <div className="font-bold text-sm" style={{ color: 'var(--green)' }}>Deposit submitted!</div>
               <div className="text-xs" style={{ color: 'var(--muted)' }}>
-                {isDirectDeposit ? `Funds deposited into ${vault.name}` : `Funds will be in ${vault.name} in ~${fillTime ?? 2}s`}
+                {isDirectDeposit ? 'Transaction submitted — confirms in ~12s' : `Funds will be in ${vault.name} in ~${fillTime ?? 2}s`}
               </div>
               {txHash && (
                 <a href={`${EXPLORERS[selectedChain.id] ?? 'https://etherscan.io/tx'}/${txHash}`} target="_blank" rel="noreferrer"
