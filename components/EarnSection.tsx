@@ -88,7 +88,7 @@ function VaultCard({ vaultKey, stats, statsLoading, onDeposit }: VaultCardProps)
                 PROTECTED
               </span>
             </div>
-            <p className="text-xs mt-1 leading-relaxed max-w-sm" style={{ color: 'var(--muted)' }}>
+            <p className="text-xs mt-1 leading-relaxed overflow-hidden" style={{ color: 'var(--muted)', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' }}>
               {vault.description}
             </p>
           </div>
