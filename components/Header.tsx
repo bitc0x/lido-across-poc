@@ -17,23 +17,16 @@ export default function Header({ activeTab, onTabChange }: HeaderProps) {
     >
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
 
-        {/* Logo */}
-        <div className="flex flex-col items-start shrink-0">
-          <div className="flex items-center gap-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={LIDO_LOGO} alt="Lido" width={26} height={26}
-              style={{ borderRadius: '50%', objectFit: 'cover' }} />
-            <span className="font-bold text-[15px] tracking-tight" style={{ color: 'var(--text)' }}>Lido</span>
-            <span style={{ color: 'var(--muted)', fontSize: 13, fontWeight: 400 }}>×</span>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="https://s3.coinmarketcap.com/static-gravity/image/54490f7ee08a4cb185c13049500dc279.png"
-              alt="Across" width={26} height={26} style={{ borderRadius: '50%' }} />
-            <span className="font-bold text-[15px] tracking-tight" style={{ color: 'var(--text)' }}>Across</span>
-          </div>
-          <span className="text-[10px] font-semibold tracking-wide"
-            style={{ color: 'var(--muted)', marginTop: 1, paddingLeft: 1 }}>
-            PROOF OF CONCEPT
-          </span>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={LIDO_LOGO} alt="Lido" width={26} height={26}
+            style={{ borderRadius: '50%', objectFit: 'cover' }} />
+          <span className="font-bold text-[15px] tracking-tight" style={{ color: 'var(--text)' }}>Lido</span>
+          <span style={{ color: 'var(--muted)', fontSize: 13, fontWeight: 400 }}>×</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="https://s3.coinmarketcap.com/static-gravity/image/54490f7ee08a4cb185c13049500dc279.png"
+            alt="Across" width={26} height={26} style={{ borderRadius: '50%' }} />
+          <span className="font-bold text-[15px] tracking-tight" style={{ color: 'var(--text)' }}>Across</span>
         </div>
 
         {/* Nav */}
