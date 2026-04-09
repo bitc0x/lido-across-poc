@@ -201,11 +201,13 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
     })
   }
 
-  const rawBal = selectedToken.isNative ? nativeBal?.value : (() => {
-    const idx = erc20Tokens.findIndex(e => e.symbol === selectedToken.symbol)
-    const res = typedBals?.[idx]
-    return (res?.status === 'success') ? (res as { status: 'success'; result: bigint }).result : undefined
-  })()
+  const rawBal: bigint | undefined = selectedToken.isNative
+    ? nativeBal?.value
+    : (() => {
+        const idx = erc20Tokens.findIndex(e => e.symbol === selectedToken.symbol)
+        const res = typedBals?.[idx]
+        return res?.status === 'success' ? res.result : undefined
+      })()
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -412,14 +414,23 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
               <span className="font-bold text-base" style={{ color: 'var(--text)' }}>
                 Deposit into {vault.name}
               </span>
-              <span className="flex items-center gap-1 text-xs font-bold px-1.5 py-0.5 rounded"
-                style={{ background: 'var(--orange-dim)', color: 'var(--orange)' }}>
-                <Img src={ACROSS_LOGO} size={13} />
-                via Across
-              </span>
+              {isDirectDeposit ? (
+                <span className="text-xs font-bold px-1.5 py-0.5 rounded"
+                  style={{ background: 'var(--green-dim)', color: 'var(--green)' }}>
+                  Direct deposit
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-xs font-bold px-1.5 py-0.5 rounded"
+                  style={{ background: 'var(--orange-dim)', color: 'var(--orange)' }}>
+                  <Img src={ACROSS_LOGO} size={13} />
+                  via Across
+                </span>
+              )}
             </div>
             <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-              Any chain, any asset — directly into the vault
+              {isDirectDeposit
+                ? 'Direct deposit on Ethereum — no bridge, no fees'
+                : 'Any chain, any asset — directly into the vault'}
             </p>
           </div>
           <button onClick={onClose}
@@ -599,7 +610,7 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
           {quote && !loading && (
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
-                <div className="text-xs mb-0.5" style={{ color: 'var(--muted)' }}>Bridge fee</div>
+                <div className="text-xs mb-0.5" style={{ color: 'var(--muted)' }}>{isDirectDeposit ? 'Fee' : 'Bridge fee'}</div>
                 <div className="text-sm font-bold" style={{ color: 'var(--text)' }}>
                   {isDirectDeposit ? 'None' : feeUsd ? `~$${parseFloat(feeUsd).toFixed(4)}` : 'Free'}
                 </div>
