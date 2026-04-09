@@ -5,6 +5,26 @@ import { useAccount, useSendTransaction, useSwitchChain, useBalance, useReadCont
 import { parseUnits, formatUnits } from 'viem'
 import { SUPPORTED_CHAINS, type ChainInfo, type TokenInfo } from '@/lib/chains'
 
+// ─── Vault config ────────────────────────────────────────────────────────────
+// Actual vault deposit contracts (Lido sync deposit queues, from networks/mainnet.json)
+// Function: deposit(uint224 assets, address referral, bytes32[] merkleProof)
+const VAULT_CONFIG = {
+  ETH: {
+    // All ETH-type assets arrive as WETH on Ethereum mainnet
+    outputToken:  '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
+    depositQueue: '0xCe6C2505fEF74d2dE10FCF1d534cB73eCc837976', // ethSyncDepositQueueWETH
+  },
+  USD: {
+    // All USD-type assets arrive as USDC on Ethereum mainnet
+    outputToken:  '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+    depositQueue: '0xf6AFAf6afcAe116dD37A779D50fE6c5fa6f8C8f5', // usdSyncDepositQueueUSDC
+  },
+} as const
+
+// Across MulticallHandler on Ethereum mainnet - recipient for embedded actions
+const MULTICALL_HANDLER = '0x924a9f036260DdD5808007E1AA95f08eD08aA569'
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 interface VaultConfig {
   name: string
   shareToken: string
@@ -14,6 +34,7 @@ interface VaultConfig {
 
 interface DepositPanelProps {
   vault: VaultConfig
+  vaultKey: 'ETH' | 'USD'
   onClose: () => void
 }
 
@@ -22,32 +43,27 @@ interface AcrossQuote {
   minOutputAmount: string
   expectedFillTime: number
   fees: { total: { amountUsd: string; amount: string } }
-  swapTx: { to: string; data: string; value?: string; chainId: number }
+  swapTx: { to: string; data: string; value?: string; chainId: number; simulationSuccess?: boolean }
   approvalTxns?: Array<{ to: string; data: string; chainId: number }>
 }
 
-const ERC20_ABI = [
-  {
-    type: 'function' as const,
-    name: 'balanceOf',
-    stateMutability: 'view' as const,
-    inputs: [{ name: 'account', type: 'address' as const }],
-    outputs: [{ name: '', type: 'uint256' as const }],
-  },
-]
+const ERC20_ABI = [{
+  type: 'function' as const, name: 'balanceOf', stateMutability: 'view' as const,
+  inputs: [{ name: 'account', type: 'address' as const }],
+  outputs: [{ name: '', type: 'uint256' as const }],
+}]
 
 const ACROSS_LOGO = 'https://s3.coinmarketcap.com/static-gravity/image/54490f7ee08a4cb185c13049500dc279.png'
+const ZERO_ADDR = '0x0000000000000000000000000000000000000000'
+const MAX_UINT256 = '115792089237316195423570985008687907853269984665640564039457584007913129639935'
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function safeParseUnits(value: string, decimals: number): bigint | null {
   try {
     const parts = value.split('.')
-    if (parts.length === 2 && parts[1].length > decimals) {
-      value = `${parts[0]}.${parts[1].slice(0, decimals)}`
-    }
+    if (parts.length === 2 && parts[1].length > decimals) value = `${parts[0]}.${parts[1].slice(0, decimals)}`
     return parseUnits(value as `${number}`, decimals)
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
 
 function formatBalance(raw: bigint, decimals: number): string {
@@ -59,23 +75,13 @@ function formatBalance(raw: bigint, decimals: number): string {
   return n.toLocaleString('en-US', { maximumFractionDigits: 2 })
 }
 
-function ChainLogo({ logoUrl, color, size = 18 }: { logoUrl: string; color: string; size?: number }) {
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={logoUrl} alt="" width={size} height={size}
-      style={{ borderRadius: '50%', flexShrink: 0, objectFit: 'cover', background: color }} />
-  )
+function Img({ src, size = 18, color }: { src: string; size?: number; color?: string }) {
+  return <img src={src} alt="" width={size} height={size}
+    style={{ borderRadius: '50%', flexShrink: 0, objectFit: 'cover', background: color }} />
 }
 
-function TokenLogo({ logoUrl, size = 16 }: { logoUrl: string; size?: number }) {
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={logoUrl} alt="" width={size} height={size}
-      style={{ borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }} />
-  )
-}
-
-export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
+// ─── Component ───────────────────────────────────────────────────────────────
+export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelProps) {
   const { address, chain: walletChain } = useAccount()
   const { sendTransactionAsync } = useSendTransaction()
   const { switchChainAsync } = useSwitchChain()
@@ -94,18 +100,13 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
   const chainRef = useRef<HTMLDivElement>(null)
   const tokenRef = useRef<HTMLDivElement>(null)
 
-  // --- Balance reading ---
-  const erc20Tokens = selectedChain.tokens.filter(t => !t.isNative)
-
-  // Only read balances when wallet is on the selected chain - avoids CORS errors
-  // from public RPCs that block browser requests for foreign chains
   const onCorrectChain = !!address && walletChain?.id === selectedChain.id
+  const erc20Tokens = selectedChain.tokens.filter(t => !t.isNative)
 
   const { data: nativeBal } = useBalance({
     address,
     query: { enabled: onCorrectChain, refetchInterval: 15_000 },
   })
-
   const { data: erc20Bals } = useReadContracts({
     contracts: erc20Tokens.map(t => ({
       address: t.address as `0x${string}`,
@@ -115,43 +116,35 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
     })),
     query: { enabled: onCorrectChain && erc20Tokens.length > 0, refetchInterval: 15_000 },
   })
-
   type ERC20Result = { status: 'success'; result: bigint } | { status: 'failure'; error: Error }
-  const typedErc20Bals = erc20Bals as ERC20Result[] | undefined
+  const typedBals = erc20Bals as ERC20Result[] | undefined
 
-  // Build symbol -> formatted balance map
   const balances: Record<string, string> = {}
-  if (address) {
+  if (address && onCorrectChain) {
     selectedChain.tokens.forEach(t => {
       if (t.isNative && nativeBal) {
         balances[t.symbol] = formatBalance(nativeBal.value, t.decimals)
-      } else if (!t.isNative && typedErc20Bals) {
+      } else if (!t.isNative && typedBals) {
         const idx = erc20Tokens.findIndex(e => e.symbol === t.symbol)
-        const res = typedErc20Bals[idx]
-        if (res && res.status === 'success' && res.result != null) {
-          balances[t.symbol] = formatBalance(res.result as bigint, t.decimals)
-        }
+        const res = typedBals[idx]
+        if (res?.status === 'success') balances[t.symbol] = formatBalance(res.result, t.decimals)
       }
     })
   }
 
-  const selectedBalance = balances[selectedToken.symbol]
-  const rawSelectedBalance = selectedToken.isNative
-    ? nativeBal?.value
-    : (() => {
-        const idx = erc20Tokens.findIndex(e => e.symbol === selectedToken.symbol)
-        const res = typedErc20Bals?.[idx]
-        return (res && res.status === 'success' && res.result != null) ? (res.result as bigint) : undefined
-      })()
+  const rawBal = selectedToken.isNative ? nativeBal?.value : (() => {
+    const idx = erc20Tokens.findIndex(e => e.symbol === selectedToken.symbol)
+    const res = typedBals?.[idx]
+    return (res?.status === 'success') ? (res as { status: 'success'; result: bigint }).result : undefined
+  })()
 
-  // --- Dropdown close on outside click ---
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
+    const h = (e: MouseEvent) => {
       if (chainRef.current && !chainRef.current.contains(e.target as Node)) setChainOpen(false)
       if (tokenRef.current && !tokenRef.current.contains(e.target as Node)) setTokenOpen(false)
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
   }, [])
 
   useEffect(() => {
@@ -165,32 +158,69 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedToken, amount])
 
-  // --- Quote fetching ---
+  const cfg = VAULT_CONFIG[vaultKey]
+
   const fetchQuote = useCallback(async () => {
     if (!amount || parseFloat(amount) <= 0) { setQuote(null); setQuoteError(''); return }
     const amountIn = safeParseUnits(amount, selectedToken.decimals)
     if (!amountIn || amountIn <= BigInt(0)) { setQuoteError('Invalid amount'); return }
 
-    const recipient = address || '0x0000000000000000000000000000000000000001'
     const depositor = address || '0x0000000000000000000000000000000000000001'
-    const inputToken = selectedToken.isNative ? '0x0000000000000000000000000000000000000000' : selectedToken.address
+    const inputToken = selectedToken.isNative ? ZERO_ADDR : selectedToken.address
 
     setLoading(true); setQuoteError('')
     try {
       const params = new URLSearchParams({
-        inputToken, outputToken: vault.outputToken.address,
-        originChainId: String(selectedChain.id), destinationChainId: '1',
-        amount: amountIn.toString(), recipient, depositor,
+        inputToken,
+        outputToken: cfg.outputToken,
+        originChainId: String(selectedChain.id),
+        destinationChainId: '1',
+        amount: amountIn.toString(),
+        depositor,
+        recipient: MULTICALL_HANDLER,   // MulticallHandler executes actions on arrival
+        tradeType: 'exactInput',
         integratorId: '0x00f1',
       })
-      // Call Across directly from the browser - CORS is open (access-control-allow-origin: *)
-      // Serverless proxy causes Cloudflare to block Vercel's IP range
-      const res = await fetch(`https://app.across.to/api/swap/approval?${params}`)
+
+      // Embedded actions: approve output token to deposit queue, then deposit into vault
+      const actions = [
+        {
+          target: cfg.outputToken,
+          functionSignature: 'function approve(address spender, uint256 amount)',
+          value: '0',
+          args: [
+            { value: cfg.depositQueue },
+            { value: MAX_UINT256 },
+          ],
+        },
+        {
+          target: cfg.depositQueue,
+          functionSignature: 'function deposit(uint224 assets, address referral, bytes32[] merkleProof)',
+          value: '0',
+          args: [
+            { value: '0', populateDynamically: true, balanceSourceToken: cfg.outputToken },
+            { value: ZERO_ADDR },
+            { value: [] },
+          ],
+        },
+      ]
+
+      const res = await fetch(
+        `https://app.across.to/api/swap/approval?${params}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actions }),
+        }
+      )
       const data = await res.json()
+
       if (data.message || data.error || data.code) {
         const raw: string = data.message || data.error || ''
         const msg = raw.toLowerCase().includes('too low') || raw.toLowerCase().includes('minimum')
-          ? 'Amount too low for this route. Try a larger amount.'
+          ? 'Amount too low. Try a larger amount.'
+          : raw.toLowerCase().includes('simulation') || raw.toLowerCase().includes('reverted')
+          ? 'Simulation failed. Try a larger amount.'
           : raw.toLowerCase().includes('not supported') || raw.toLowerCase().includes('route')
           ? 'Route not supported. Try a different token or chain.'
           : 'Quote unavailable. Try a different amount or token.'
@@ -200,14 +230,13 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
       }
     } catch { setQuoteError('Network error. Please try again.') }
     finally { setLoading(false) }
-  }, [amount, selectedToken, selectedChain, vault, address])
+  }, [amount, selectedToken, selectedChain, cfg, address])
 
   useEffect(() => {
     const t = setTimeout(fetchQuote, 700)
     return () => clearTimeout(t)
   }, [fetchQuote])
 
-  // --- Transaction ---
   const handleDeposit = async () => {
     if (!quote || !address) return
     try {
@@ -235,23 +264,17 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
   }
 
   const handleMax = () => {
-    if (!rawSelectedBalance) return
-    // Leave a small buffer for native ETH gas
+    if (!rawBal) return
     const buf = selectedToken.isNative ? parseUnits('0.001', 18) : BigInt(0)
-    const max = rawSelectedBalance > buf ? rawSelectedBalance - buf : rawSelectedBalance
+    const max = rawBal > buf ? rawBal - buf : rawBal
     setAmount(Number(formatUnits(max, selectedToken.decimals)).toFixed(6).replace(/\.?0+$/, ''))
   }
 
-  const outputAmt = quote
-    ? Number(formatUnits(BigInt(quote.expectedOutputAmount), vault.outputToken.decimals)).toFixed(6)
-    : null
-  const minAmt = quote
-    ? Number(formatUnits(BigInt(quote.minOutputAmount), vault.outputToken.decimals)).toFixed(6)
-    : null
+  const outputAmt = quote ? Number(formatUnits(BigInt(quote.expectedOutputAmount), vault.outputToken.decimals)).toFixed(6) : null
   const fillTime = quote?.expectedFillTime ?? null
   const feeUsd = quote?.fees?.total?.amountUsd ?? null
-  const needsChainSwitch = !!address && walletChain?.id !== selectedChain.id
-  const isProcessing = txStatus === 'switching' || txStatus === 'approving' || txStatus === 'depositing'
+  const needsSwitch = !!address && walletChain?.id !== selectedChain.id
+  const isProcessing = ['switching','approving','depositing'].includes(txStatus)
   const canDeposit = !!quote && !loading && !isProcessing && !quoteError && !!address
 
   const buttonLabel = !address ? 'Connect wallet to deposit'
@@ -259,11 +282,11 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
     : isProcessing ? (
         txStatus === 'switching' ? `Switching to ${selectedChain.name}...`
         : txStatus === 'approving' ? 'Approving token...'
-        : 'Submitting bridge...'
+        : 'Submitting deposit...'
       )
     : quoteError ? 'Quote unavailable'
     : !quote ? 'Enter an amount'
-    : needsChainSwitch ? `Switch to ${selectedChain.name} and deposit`
+    : needsSwitch ? `Switch to ${selectedChain.name} and deposit`
     : `Deposit into ${vault.name}`
 
   return (
@@ -282,12 +305,12 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
               </span>
               <span className="flex items-center gap-1 text-xs font-bold px-1.5 py-0.5 rounded"
                 style={{ background: 'var(--orange-dim)', color: 'var(--orange)' }}>
-                <TokenLogo logoUrl={ACROSS_LOGO} size={13} />
+                <Img src={ACROSS_LOGO} size={13} />
                 via Across
               </span>
             </div>
             <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-              Any chain, any asset, one transaction
+              Any chain, any asset — directly into the vault
             </p>
           </div>
           <button onClick={onClose}
@@ -309,7 +332,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
                 className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold"
                 style={{ background: 'var(--bg)', border: `1px solid ${chainOpen ? 'var(--blue)' : 'var(--border)'}`, color: 'var(--text)' }}>
                 <div className="flex items-center gap-2">
-                  <ChainLogo logoUrl={selectedChain.logoUrl} color={selectedChain.color} />
+                  <Img src={selectedChain.logoUrl} color={selectedChain.color} />
                   {selectedChain.name}
                 </div>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -328,7 +351,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
                           background: selectedChain.id === c.id ? 'var(--blue-dim)' : 'transparent',
                           color: selectedChain.id === c.id ? 'var(--blue)' : 'var(--text)',
                         }}>
-                        <ChainLogo logoUrl={c.logoUrl} color={c.color} />
+                        <Img src={c.logoUrl} color={c.color} />
                         {c.name}
                       </button>
                     ))}
@@ -342,28 +365,23 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-semibold" style={{ color: 'var(--muted)' }}>YOU SEND</label>
-              {address && onCorrectChain && selectedBalance !== undefined && (
+              {address && onCorrectChain && balances[selectedToken.symbol] !== undefined ? (
                 <span className="text-xs" style={{ color: 'var(--muted)' }}>
-                  Balance: <span style={{ color: 'var(--text)', fontWeight: 600 }}>{selectedBalance}</span>
-                  {' '}{selectedToken.symbol}
+                  Balance: <span style={{ color: 'var(--text)', fontWeight: 600 }}>{balances[selectedToken.symbol]}</span> {selectedToken.symbol}
                 </span>
-              )}
-              {address && !onCorrectChain && (
+              ) : address && !onCorrectChain ? (
                 <span className="text-xs" style={{ color: 'var(--muted)' }}>
-                  Switch wallet to {selectedChain.name} to see balance
+                  Switch to {selectedChain.name} to see balance
                 </span>
-              )}
+              ) : null}
             </div>
             <div className="flex gap-2">
-              {/* Token selector */}
               <div className="relative shrink-0" ref={tokenRef}>
                 <button onClick={() => { setTokenOpen(v => !v); setChainOpen(false) }}
                   className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap"
                   style={{ background: 'var(--bg)', border: `1px solid ${tokenOpen ? 'var(--blue)' : 'var(--border)'}`, color: 'var(--text)' }}>
-                  <div className="flex items-center gap-1.5">
-                    <TokenLogo logoUrl={selectedToken.logoUrl} />
-                    {selectedToken.symbol}
-                  </div>
+                  <Img src={selectedToken.logoUrl} />
+                  {selectedToken.symbol}
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                     style={{ transform: tokenOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
                     <polyline points="6 9 12 15 18 9"/>
@@ -379,11 +397,10 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
                           background: selectedToken.symbol === t.symbol ? 'var(--blue-dim)' : 'transparent',
                           color: selectedToken.symbol === t.symbol ? 'var(--blue)' : 'var(--text)',
                         }}>
-                        <TokenLogo logoUrl={t.logoUrl} />
+                        <Img src={t.logoUrl} />
                         <span className="font-bold">{t.symbol}</span>
                         <span className="text-xs" style={{ color: 'var(--muted)' }}>{t.name}</span>
-                        {/* Balance on the right */}
-                {address && onCorrectChain && balances[t.symbol] !== undefined && (
+                        {address && onCorrectChain && balances[t.symbol] !== undefined && (
                           <span className="ml-auto text-xs font-semibold tabular-nums"
                             style={{ color: balances[t.symbol] === '0' ? 'var(--muted)' : 'var(--text)' }}>
                             {balances[t.symbol]}
@@ -394,23 +411,19 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
                   </div>
                 )}
               </div>
-
-              {/* Amount + MAX */}
               <div className="flex-1 relative">
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  placeholder="0.00"
-                  value={amount}
-                  onChange={e => setAmount(e.target.value)}
+                <input type="number" inputMode="decimal" placeholder="0.00"
+                  value={amount} onChange={e => setAmount(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl text-sm font-semibold outline-none"
-                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', paddingRight: rawSelectedBalance ? '52px' : '12px', transition: 'border-color 0.15s' }}
+                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)',
+                    paddingRight: (onCorrectChain && rawBal && rawBal > BigInt(0)) ? '52px' : '12px',
+                    transition: 'border-color 0.15s' }}
                   onFocus={e => (e.target.style.borderColor = 'var(--blue)')}
                   onBlur={e => (e.target.style.borderColor = 'var(--border)')}
                 />
-                {onCorrectChain && rawSelectedBalance && rawSelectedBalance > BigInt(0) && (
+                {onCorrectChain && rawBal && rawBal > BigInt(0) && (
                   <button onClick={handleMax}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold px-1.5 py-0.5 rounded transition-opacity hover:opacity-70"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold px-1.5 py-0.5 rounded hover:opacity-70"
                     style={{ background: 'var(--blue-dim)', color: 'var(--blue)' }}>
                     MAX
                   </button>
@@ -419,7 +432,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
             </div>
           </div>
 
-          {/* Route indicator */}
+          {/* Route */}
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold"
@@ -427,7 +440,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
               </svg>
-              Across routes to Ethereum
+              Across bridges and deposits into vault
             </div>
             <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
           </div>
@@ -435,28 +448,33 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
           {/* Output */}
           <div className="rounded-xl p-3.5 space-y-1.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold" style={{ color: 'var(--muted)' }}>YOU RECEIVE ON ETHEREUM</span>
+              <span className="text-xs font-semibold" style={{ color: 'var(--muted)' }}>
+                YOU RECEIVE ({vault.shareToken} vault shares)
+              </span>
               {loading && (
                 <div className="w-3 h-3 rounded-full border-2 animate-spin-slow"
                   style={{ borderColor: 'var(--blue)', borderTopColor: 'transparent' }} />
               )}
             </div>
-            <div className="flex items-baseline gap-1.5">
+            <div className="flex items-center gap-1.5">
               <span className="text-xl font-extrabold" style={{ color: loading ? 'var(--muted)' : 'var(--text)' }}>
                 {loading ? '...' : outputAmt ?? '0.000000'}
               </span>
               <span className="text-sm font-bold" style={{ color: vault.color }}>
                 {vault.outputToken.symbol}
               </span>
+              <span className="text-xs ml-1" style={{ color: 'var(--muted)' }}>
+                → deposited into {vault.name}
+              </span>
             </div>
-            {minAmt && !loading && (
-              <div className="text-xs" style={{ color: 'var(--muted)' }}>
-                Min {minAmt} {vault.outputToken.symbol}, then deposited into {vault.name}
+            {quote && !loading && (
+              <div className="text-xs" style={{ color: 'var(--green)' }}>
+                ✓ Vault deposit simulated successfully
               </div>
             )}
           </div>
 
-          {/* Quote details */}
+          {/* Fee + time */}
           {quote && !loading && (
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
@@ -474,7 +492,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
 
           {/* Errors */}
           {quoteError && (
-            <div className="text-xs px-3 py-2.5 rounded-lg leading-relaxed"
+            <div className="text-xs px-3 py-2.5 rounded-lg"
               style={{ background: 'rgba(255,100,100,0.08)', color: '#ff8888', border: '1px solid rgba(255,100,100,0.15)' }}>
               {quoteError}
             </div>
@@ -482,7 +500,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
           {txStatus === 'error' && !quoteError && (
             <div className="text-xs px-3 py-2.5 rounded-lg"
               style={{ background: 'rgba(255,100,100,0.08)', color: '#ff8888', border: '1px solid rgba(255,100,100,0.15)' }}>
-              Transaction rejected or failed. Try again below.
+              Transaction rejected or failed. Try again.
             </div>
           )}
 
@@ -491,14 +509,14 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
             <div className="rounded-xl p-4 text-center space-y-2"
               style={{ background: 'var(--green-dim)', border: '1px solid rgba(90,200,120,0.25)' }}>
               <div style={{ fontSize: 24 }}>✓</div>
-              <div className="font-bold text-sm" style={{ color: 'var(--green)' }}>Bridge submitted!</div>
+              <div className="font-bold text-sm" style={{ color: 'var(--green)' }}>Deposit submitted!</div>
               <div className="text-xs" style={{ color: 'var(--muted)' }}>
-                {vault.outputToken.symbol} arriving on Ethereum in ~{fillTime ?? 2}s
+                Funds will be in {vault.name} in ~{fillTime ?? 2}s
               </div>
               {txHash && (
-                <a href={`https://etherscan.io/tx/${txHash}`} target="_blank" rel="noreferrer"
+                <a href={`https://arbiscan.io/tx/${txHash}`} target="_blank" rel="noreferrer"
                   className="text-xs underline block" style={{ color: 'var(--muted-light)' }}>
-                  View on Etherscan
+                  View transaction
                 </a>
               )}
             </div>
@@ -506,9 +524,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
 
           {/* CTA */}
           {txStatus !== 'success' && (
-            <button
-              onClick={canDeposit ? handleDeposit : undefined}
-              disabled={!canDeposit}
+            <button onClick={canDeposit ? handleDeposit : undefined} disabled={!canDeposit}
               className="w-full py-3.5 rounded-xl font-bold text-sm transition-all active:scale-[0.98]"
               style={canDeposit
                 ? { background: vault.color, color: '#fff', cursor: 'pointer' }
