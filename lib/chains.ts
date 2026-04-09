@@ -31,6 +31,18 @@ const CHAIN_BASE = 'https://alexandria-blond.vercel.app/assets/chains'
 
 export const SUPPORTED_CHAINS: ChainInfo[] = [
   {
+    // Ethereum is the vault destination chain — deposits here go directly to vault queues (no bridge)
+    id: 1, name: 'Ethereum', shortName: 'ETH', color: '#627EEA',
+    logoUrl: `${CHAIN_BASE}/mainnet.svg`,
+    tokens: [
+      { symbol: 'ETH',    name: 'Ethereum',     address: '0x0000000000000000000000000000000000000000', decimals: 18, isNative: true, logoUrl: LOGOS.ETH },
+      { symbol: 'WETH',   name: 'Wrapped ETH',  address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', decimals: 18, logoUrl: LOGOS.ETH },
+      { symbol: 'wstETH', name: 'Wrapped stETH',address: '0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0', decimals: 18, logoUrl: LOGOS.wstETH },
+      { symbol: 'USDC',   name: 'USD Coin',      address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6,  logoUrl: LOGOS.USDC },
+      { symbol: 'USDT',   name: 'Tether',        address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6,  logoUrl: LOGOS.USDT },
+    ],
+  },
+  {
     id: 42161, name: 'Arbitrum', shortName: 'ARB', color: '#12AAFF',
     logoUrl: `${CHAIN_BASE}/arbitrum.svg`,
     tokens: [
