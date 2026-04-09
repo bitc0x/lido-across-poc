@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAccount, useSendTransaction, useSwitchChain, useBalance, useReadContracts } from 'wagmi'
-import { parseUnits, formatUnits } from 'viem'
+import { parseUnits, formatUnits, encodeFunctionData } from 'viem'
 import { SUPPORTED_CHAINS, type ChainInfo, type TokenInfo } from '@/lib/chains'
 
 // ─── Vault config ────────────────────────────────────────────────────────────
@@ -55,6 +55,47 @@ const ERC20_ABI = [{
 const ACROSS_LOGO = 'https://s3.coinmarketcap.com/static-gravity/image/54490f7ee08a4cb185c13049500dc279.png'
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000'
 const MAX_UINT256 = '115792089237316195423570985008687907853269984665640564039457584007913129639935'
+
+// ─── Direct deposit (Ethereum mainnet only) ───────────────────────────────────
+// When origin = Ethereum, funds go straight to Lido sync deposit queues — no bridge needed.
+// queue addresses from Lido networks/mainnet.json
+const DIRECT_QUEUES: Record<string, Record<string, { queue: `0x${string}`; native: boolean }>> = {
+  ETH: {
+    ETH:    { queue: '0xb99394f8b95d426Cb2F013B857C74aCC924b20D5', native: true  }, // ethSyncDepositQueueETH
+    WETH:   { queue: '0xCe6C2505fEF74d2dE10FCF1d534cB73eCc837976', native: false }, // ethSyncDepositQueueWETH
+    wstETH: { queue: '0xECD2Bfe725fa14f5Ed86e9bDcc0eA4b34A4ed522', native: false }, // ethSyncDepositQueueWSTETH
+  },
+  USD: {
+    USDC: { queue: '0xf6AFAf6afcAe116dD37A779D50fE6c5fa6f8C8f5', native: false }, // usdSyncDepositQueueUSDC
+    USDT: { queue: '0x534d0bEb82C47cf703BFb9E959297658b65Ec8E9', native: false }, // usdSyncDepositQueueUSDT
+  },
+}
+
+// Only show tokens that have a direct deposit queue for the active vault
+const ETHEREUM_TOKENS_BY_VAULT: Record<string, string[]> = {
+  ETH: ['ETH', 'WETH', 'wstETH'],
+  USD: ['USDC', 'USDT'],
+}
+
+// ABIs for encoding direct deposit calldata
+const QUEUE_DEPOSIT_ABI = [{
+  type: 'function' as const, name: 'deposit', stateMutability: 'payable' as const,
+  inputs: [
+    { name: 'assets', type: 'uint224' as const },
+    { name: 'referral', type: 'address' as const },
+    { name: 'merkleProof', type: 'bytes32[]' as const },
+  ],
+  outputs: [],
+}]
+
+const ERC20_APPROVE_ABI = [{
+  type: 'function' as const, name: 'approve', stateMutability: 'nonpayable' as const,
+  inputs: [
+    { name: 'spender', type: 'address' as const },
+    { name: 'amount', type: 'uint256' as const },
+  ],
+  outputs: [],
+}]
 
 // Block explorer tx URL base per chain ID
 const EXPLORERS: Record<number, string> = {
@@ -176,9 +217,13 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
   }, [])
 
   useEffect(() => {
-    setSelectedToken(selectedChain.tokens[0])
+    const direct = selectedChain.id === 1
+    const tokens = direct
+      ? selectedChain.tokens.filter(t => ETHEREUM_TOKENS_BY_VAULT[vaultKey]?.includes(t.symbol))
+      : selectedChain.tokens
+    setSelectedToken(tokens[0] ?? selectedChain.tokens[0])
     setQuote(null); setQuoteError(''); setTxStatus('idle')
-  }, [selectedChain])
+  }, [selectedChain, vaultKey])
 
   useEffect(() => {
     setQuote(null); setQuoteError('')
@@ -187,12 +232,47 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
   }, [selectedToken, amount])
 
   const cfg = VAULT_CONFIG[vaultKey]
+  const isDirectDeposit = selectedChain.id === 1
+
+  // For Ethereum origin: only show tokens with a matching direct-deposit queue
+  const availableTokens = isDirectDeposit
+    ? selectedChain.tokens.filter(t => ETHEREUM_TOKENS_BY_VAULT[vaultKey]?.includes(t.symbol))
+    : selectedChain.tokens
 
   const fetchQuote = useCallback(async () => {
     if (!amount || parseFloat(amount) <= 0) { setQuote(null); setQuoteError(''); return }
     const amountIn = safeParseUnits(amount, selectedToken.decimals)
     if (!amountIn || amountIn <= BigInt(0)) { setQuoteError('Invalid amount'); return }
 
+    // ── Direct Ethereum deposit (no bridge needed) ────────────────────────────
+    if (isDirectDeposit) {
+      const qInfo = DIRECT_QUEUES[vaultKey]?.[selectedToken.symbol]
+      if (!qInfo) { setQuoteError('Token not supported for direct deposit.'); return }
+
+      const depositData = encodeFunctionData({
+        abi: QUEUE_DEPOSIT_ABI, functionName: 'deposit',
+        args: [amountIn, ZERO_ADDR as `0x${string}`, [] as `0x${string}`[]],
+      })
+      const approvalTxns = qInfo.native ? [] : [{
+        to: selectedToken.address,
+        data: encodeFunctionData({
+          abi: ERC20_APPROVE_ABI, functionName: 'approve',
+          args: [qInfo.queue, BigInt(MAX_UINT256)],
+        }),
+        chainId: 1 as const,
+      }]
+      setQuote({
+        expectedOutputAmount: amountIn.toString(),
+        expectedFillTime: 0,
+        fees: { total: { amountUsd: '0' } },
+        approvalTxns,
+        swapTx: { to: qInfo.queue, data: depositData, value: qInfo.native ? amountIn.toString() : undefined, chainId: 1 },
+      })
+      setQuoteError('')
+      return
+    }
+
+    // ── Cross-chain deposit via Across ────────────────────────────────────────
     const depositor = address || '0x0000000000000000000000000000000000000001'
     const inputToken = selectedToken.isNative ? ZERO_ADDR : selectedToken.address
 
@@ -258,7 +338,7 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
       }
     } catch { setQuoteError('Network error. Please try again.') }
     finally { setLoading(false) }
-  }, [amount, selectedToken, selectedChain, cfg, address])
+  }, [amount, selectedToken, selectedChain, cfg, address, isDirectDeposit, vaultKey])
 
   useEffect(() => {
     const t = setTimeout(fetchQuote, 500)
@@ -315,6 +395,7 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
     : quoteError ? 'Quote unavailable'
     : !quote ? 'Enter an amount'
     : needsSwitch ? `Switch to ${selectedChain.name} and deposit`
+    : isDirectDeposit ? `Deposit directly into ${vault.name}`
     : `Deposit into ${vault.name}`
 
   return (
@@ -419,7 +500,7 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
                   <div className="absolute z-20 top-full mt-1 rounded-xl overflow-hidden shadow-2xl"
                     style={{ background: '#0d1222', border: '1px solid var(--border-hover)', minWidth: 220 }}>
                     <div className="max-h-56 overflow-y-auto">
-                    {selectedChain.tokens.map(t => (
+                    {availableTokens.map(t => (
                       <button key={t.symbol} onClick={() => { setSelectedToken(t); setTokenOpen(false) }}
                         className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-white/5 transition-colors"
                         style={{
@@ -465,13 +546,23 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
           {/* Route */}
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold"
-              style={{ background: 'var(--orange-dim)', color: 'var(--orange)' }}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
-              </svg>
-              Across bridges and deposits into vault
-            </div>
+            {isDirectDeposit ? (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold"
+                style={{ background: 'var(--green-dim)', color: 'var(--green)' }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Direct deposit on Ethereum
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold"
+                style={{ background: 'var(--orange-dim)', color: 'var(--orange)' }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+                </svg>
+                Across bridges and deposits into vault
+              </div>
+            )}
             <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
           </div>
 
@@ -499,7 +590,7 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
             </div>
             {quote && !loading && (
               <div className="text-xs" style={{ color: 'var(--green)' }}>
-                ✓ Vault deposit simulated successfully
+                {isDirectDeposit ? '✓ Ready — no bridge fee' : '✓ Vault deposit simulated successfully'}
               </div>
             )}
           </div>
@@ -510,12 +601,14 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
               <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
                 <div className="text-xs mb-0.5" style={{ color: 'var(--muted)' }}>Bridge fee</div>
                 <div className="text-sm font-bold" style={{ color: 'var(--text)' }}>
-                  {feeUsd ? `~$${parseFloat(feeUsd).toFixed(4)}` : 'Free'}
+                  {isDirectDeposit ? 'None' : feeUsd ? `~$${parseFloat(feeUsd).toFixed(4)}` : 'Free'}
                 </div>
               </div>
               <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
                 <div className="text-xs mb-0.5" style={{ color: 'var(--muted)' }}>Est. fill time</div>
-                <div className="text-sm font-bold" style={{ color: 'var(--green)' }}>~{fillTime ?? 2}s</div>
+                <div className="text-sm font-bold" style={{ color: 'var(--green)' }}>
+                  {isDirectDeposit ? 'Instant' : `~${fillTime ?? 2}s`}
+                </div>
               </div>
             </div>
           )}
@@ -541,7 +634,7 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
               <div style={{ fontSize: 24 }}>✓</div>
               <div className="font-bold text-sm" style={{ color: 'var(--green)' }}>Deposit submitted!</div>
               <div className="text-xs" style={{ color: 'var(--muted)' }}>
-                Funds will be in {vault.name} in ~{fillTime ?? 2}s
+                {isDirectDeposit ? `Funds deposited into ${vault.name}` : `Funds will be in ${vault.name} in ~${fillTime ?? 2}s`}
               </div>
               {txHash && (
                 <a href={`${EXPLORERS[selectedChain.id] ?? 'https://etherscan.io/tx'}/${txHash}`} target="_blank" rel="noreferrer"
