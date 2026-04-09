@@ -10,7 +10,7 @@ const STATS = [
   { value: '15+', label: 'Supported chains' },
   { value: '40+', label: 'Independent relayers' },
   { value: '~2s',  label: 'Average fill time' },
-  { value: '$0',   label: 'Fees to users' },
+  { value: '<$1',   label: 'Typical relay fee' },
 ]
 
 const STEPS = [
@@ -132,7 +132,7 @@ export default function Overview({ onGetStarted }: OverviewProps) {
             'Any liquid ERC-20: ETH, USDC, USDT, WBTC, DAI, and more',
             'Across swaps to the correct vault input automatically',
             'One transaction from origin to vault deposit',
-            'Zero fees to the user. Relayer competition drives costs to zero',
+            'Across covers gas on destination. Only a small relay fee applies',
           ].map((item, i) => (
             <div key={i} className="flex items-start gap-3 text-sm" style={{ color: 'var(--muted-light)' }}>
               <span className="mt-0.5 shrink-0" style={{ color: 'var(--green)' }}>
