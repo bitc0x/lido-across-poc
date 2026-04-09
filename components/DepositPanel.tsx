@@ -380,7 +380,14 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
     setAmount(Number(formatUnits(max, selectedToken.decimals)).toFixed(6).replace(/\.?0+$/, ''))
   }
 
-  const outputAmt = quote ? Number(formatUnits(BigInt(quote.expectedOutputAmount), vault.outputToken.decimals)).toFixed(6) : null
+  const outputAmt = quote
+    ? (() => {
+        const n = Number(formatUnits(BigInt(quote.expectedOutputAmount), vault.outputToken.decimals))
+        if (n === 0) return '0'
+        if (Number.isInteger(n)) return n.toString()
+        return n.toFixed(6).replace(/\.?0+$/, '')
+      })()
+    : null
   const fillTime = quote?.expectedFillTime ?? null
   const feeUsd = quote?.fees?.total?.amountUsd ?? null
   const needsSwitch = !!address && walletChain?.id !== selectedChain.id
@@ -590,7 +597,7 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
             </div>
             <div className="flex items-center gap-1.5">
               <span className="text-xl font-extrabold" style={{ color: loading ? 'var(--muted)' : 'var(--text)' }}>
-                {loading ? '...' : outputAmt ?? '0.000000'}
+                {loading ? '...' : outputAmt ?? '0'}
               </span>
               <span className="text-sm font-bold" style={{ color: vault.color }}>
                 {vault.outputToken.symbol}
@@ -599,9 +606,9 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
                 → deposited into {vault.name}
               </span>
             </div>
-            {quote && !loading && (
+            {quote && !loading && !isDirectDeposit && (
               <div className="text-xs" style={{ color: 'var(--green)' }}>
-                {isDirectDeposit ? '✓ Ready — no bridge fee' : '✓ Vault deposit simulated successfully'}
+                ✓ Vault deposit simulated successfully
               </div>
             )}
           </div>
@@ -612,13 +619,13 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
               <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
                 <div className="text-xs mb-0.5" style={{ color: 'var(--muted)' }}>{isDirectDeposit ? 'Fee' : 'Bridge fee'}</div>
                 <div className="text-sm font-bold" style={{ color: 'var(--text)' }}>
-                  {isDirectDeposit ? 'Gas only' : feeUsd ? `~$${parseFloat(feeUsd).toFixed(4)}` : 'Free'}
+                  {isDirectDeposit ? '' : feeUsd ? `~$${parseFloat(feeUsd).toFixed(4)}` : 'Free'}
                 </div>
               </div>
               <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
                 <div className="text-xs mb-0.5" style={{ color: 'var(--muted)' }}>Est. fill time</div>
                 <div className="text-sm font-bold" style={{ color: 'var(--green)' }}>
-                  {isDirectDeposit ? '~12s' : `~${fillTime ?? 2}s`}
+                  {isDirectDeposit ? '~4s' : `~${fillTime ?? 2}s`}
                 </div>
               </div>
             </div>
