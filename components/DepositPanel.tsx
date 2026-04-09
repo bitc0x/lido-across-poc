@@ -181,8 +181,11 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
         inputToken, outputToken: vault.outputToken.address,
         originChainId: String(selectedChain.id), destinationChainId: '1',
         amount: amountIn.toString(), recipient, depositor,
+        integratorId: '0x00f1',
       })
-      const res = await fetch(`/api/across-quote?${params}`)
+      // Call Across directly from the browser - CORS is open (access-control-allow-origin: *)
+      // Serverless proxy causes Cloudflare to block Vercel's IP range
+      const res = await fetch(`https://app.across.to/api/swap/approval?${params}`)
       const data = await res.json()
       if (data.message || data.error || data.code) {
         const raw: string = data.message || data.error || ''
