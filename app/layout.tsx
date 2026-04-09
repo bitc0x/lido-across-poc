@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: 'Deposit into Lido Earn vaults from any chain, any asset. Powered by Across Protocol.',
   openGraph: {
     title: 'Lido Earn x Across Protocol',
-    description: 'One-click cross-chain deposits into EarnETH and EarnUSD vaults from 23 chains.',
+    description: 'One-click cross-chain deposits into EarnETH and EarnUSD vaults from 22 chains.',
   },
 }
 
