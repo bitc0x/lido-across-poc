@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-export const runtime = 'edge'
+// Node.js runtime - edge was causing 502s fetching to external APIs
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   const params = new URLSearchParams(req.nextUrl.searchParams)
@@ -11,21 +13,18 @@ export async function GET(req: NextRequest) {
   try {
     const res = await fetch(url, {
       headers: { 'Accept': 'application/json' },
-      // Don't cache quotes - they expire quickly
-      cache: 'no-store',
     })
 
     const data = await res.json()
 
     return NextResponse.json(data, {
       status: res.status,
-      headers: {
-        'Cache-Control': 'no-store, max-age=0',
-      },
+      headers: { 'Cache-Control': 'no-store' },
     })
   } catch (e) {
+    console.error('Across API fetch failed:', e)
     return NextResponse.json(
-      { error: 'Failed to reach Across API. Check your connection.' },
+      { error: 'Failed to reach Across API.' },
       { status: 502 }
     )
   }
