@@ -40,10 +40,9 @@ interface DepositPanelProps {
 
 interface AcrossQuote {
   expectedOutputAmount: string
-  minOutputAmount: string
   expectedFillTime: number
-  fees: { total: { amountUsd: string; amount: string } }
-  swapTx: { to: string; data: string; value?: string; chainId: number; simulationSuccess?: boolean }
+  fees: { total: { amountUsd: string } }
+  swapTx: { to: string; data: string; value?: string; chainId: number }
   approvalTxns?: Array<{ to: string; data: string; chainId: number }>
 }
 
@@ -233,14 +232,14 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
   }, [amount, selectedToken, selectedChain, cfg, address])
 
   useEffect(() => {
-    const t = setTimeout(fetchQuote, 700)
+    const t = setTimeout(fetchQuote, 500)
     return () => clearTimeout(t)
   }, [fetchQuote])
 
   const handleDeposit = async () => {
     if (!quote || !address) return
     try {
-      if (walletChain?.id !== selectedChain.id) {
+      if (needsSwitch) {
         setTxStatus('switching')
         await switchChainAsync({ chainId: selectedChain.id })
       }
