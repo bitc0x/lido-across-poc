@@ -258,7 +258,7 @@ export default function EarnSection() {
 
       <p className="text-center text-xs mt-8 leading-relaxed max-w-2xl mx-auto" style={{ color: 'var(--muted)' }}>
         * APY figures are estimates, not guaranteed, and subject to change. Not available to U.S. persons.
-        Vault deposits subject to 72-hour withdrawal window. This is a proof-of-concept demo.
+        Vault deposits subject to 72-hour withdrawal window.
       </p>
 
       {activeDeposit && activeVault && (
