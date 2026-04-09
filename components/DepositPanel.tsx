@@ -56,6 +56,33 @@ const ACROSS_LOGO = 'https://s3.coinmarketcap.com/static-gravity/image/54490f7ee
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000'
 const MAX_UINT256 = '115792089237316195423570985008687907853269984665640564039457584007913129639935'
 
+// Block explorer tx URL base per chain ID
+const EXPLORERS: Record<number, string> = {
+  1:         'https://etherscan.io/tx',
+  10:        'https://optimistic.etherscan.io/tx',
+  56:        'https://bscscan.com/tx',
+  130:       'https://uniscan.xyz/tx',
+  137:       'https://polygonscan.com/tx',
+  143:       'https://explorer.monad.xyz/tx',
+  232:       'https://explorer.lens.xyz/tx',
+  324:       'https://explorer.zksync.io/tx',
+  480:       'https://worldchain-mainnet.explorer.alchemy.com/tx',
+  999:       'https://explorer.hyperliquid.xyz/evm/tx',
+  1135:      'https://blockscout.lisk.com/tx',
+  1868:      'https://soneium.blockscout.com/tx',
+  4217:      'https://explorer.tempo.lol/tx',
+  4326:      'https://www.megaexplorer.xyz/tx',
+  8453:      'https://basescan.org/tx',
+  9745:      'https://plasma.blockscout.com/tx',
+  34443:     'https://explorer.mode.network/tx',
+  42161:     'https://arbiscan.io/tx',
+  57073:     'https://explorer.inkonchain.com/tx',
+  59144:     'https://lineascan.build/tx',
+  81457:     'https://blastscan.io/tx',
+  534352:    'https://scrollscan.com/tx',
+  7777777:   'https://explorer.zora.energy/tx',
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function safeParseUnits(value: string, decimals: number): bigint | null {
   try {
@@ -78,6 +105,9 @@ function Img({ src, size = 18, color }: { src: string; size?: number; color?: st
   return <img src={src} alt="" width={size} height={size}
     style={{ borderRadius: '50%', flexShrink: 0, objectFit: 'cover', background: color }} />
 }
+
+// Module-level type — avoids re-declaring on every render
+type ERC20Result = { status: 'success'; result: bigint } | { status: 'failure'; error: Error }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelProps) {
@@ -115,7 +145,6 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
     })),
     query: { enabled: onCorrectChain && erc20Tokens.length > 0, refetchInterval: 15_000 },
   })
-  type ERC20Result = { status: 'success'; result: bigint } | { status: 'failure'; error: Error }
   const typedBals = erc20Bals as ERC20Result[] | undefined
 
   const balances: Record<string, string> = {}
@@ -515,7 +544,7 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
                 Funds will be in {vault.name} in ~{fillTime ?? 2}s
               </div>
               {txHash && (
-                <a href={`https://arbiscan.io/tx/${txHash}`} target="_blank" rel="noreferrer"
+                <a href={`${EXPLORERS[selectedChain.id] ?? 'https://etherscan.io/tx'}/${txHash}`} target="_blank" rel="noreferrer"
                   className="text-xs underline block" style={{ color: 'var(--muted-light)' }}>
                   View transaction
                 </a>
