@@ -264,6 +264,7 @@ export default function EarnSection() {
       {activeDeposit && activeVault && (
         <DepositPanel
           vault={activeVault}
+          vaultKey={activeDeposit}
           onClose={() => setActiveDeposit(null)}
         />
       )}
