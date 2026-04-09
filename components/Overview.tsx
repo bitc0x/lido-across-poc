@@ -7,7 +7,7 @@ interface OverviewProps {
 }
 
 const STATS = [
-  { value: '23',  label: 'Supported chains' },
+  { value: '22',  label: 'Supported chains' },
   { value: '40+', label: 'Independent relayers' },
   { value: '~2s',  label: 'Average fill time' },
   { value: '<$1',   label: 'Typical relay fee' },
@@ -128,7 +128,7 @@ export default function Overview({ onGetStarted }: OverviewProps) {
             <span className="font-semibold text-sm" style={{ color: 'var(--text)' }}>Unlocked</span>
           </div>
           {[
-            '23 chains supported (Arbitrum, Base, OP, Polygon, Blast, HyperEVM, MegaETH...)',
+            '22 chains supported (Arbitrum, Base, OP, Polygon, Blast, HyperEVM, MegaETH...)',
             'Any liquid ERC-20: ETH, USDC, USDT, WBTC, DAI, and more',
             'Across swaps to the correct vault input automatically',
             'One transaction from origin to vault deposit',
