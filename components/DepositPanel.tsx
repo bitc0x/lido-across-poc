@@ -97,10 +97,13 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
   // --- Balance reading ---
   const erc20Tokens = selectedChain.tokens.filter(t => !t.isNative)
 
+  // Only read balances when wallet is on the selected chain - avoids CORS errors
+  // from public RPCs that block browser requests for foreign chains
+  const onCorrectChain = !!address && walletChain?.id === selectedChain.id
+
   const { data: nativeBal } = useBalance({
     address,
-    chainId: selectedChain.id,
-    query: { enabled: !!address, refetchInterval: 15_000 },
+    query: { enabled: onCorrectChain, refetchInterval: 15_000 },
   })
 
   const { data: erc20Bals } = useReadContracts({
@@ -109,9 +112,8 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
       abi: ERC20_ABI,
       functionName: 'balanceOf' as const,
       args: address ? [address as `0x${string}`] : undefined,
-      chainId: selectedChain.id,
     })),
-    query: { enabled: !!address && erc20Tokens.length > 0, refetchInterval: 15_000 },
+    query: { enabled: onCorrectChain && erc20Tokens.length > 0, refetchInterval: 15_000 },
   })
 
   type ERC20Result = { status: 'success'; result: bigint } | { status: 'failure'; error: Error }
@@ -337,10 +339,15 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-semibold" style={{ color: 'var(--muted)' }}>YOU SEND</label>
-              {address && selectedBalance !== undefined && (
+              {address && onCorrectChain && selectedBalance !== undefined && (
                 <span className="text-xs" style={{ color: 'var(--muted)' }}>
                   Balance: <span style={{ color: 'var(--text)', fontWeight: 600 }}>{selectedBalance}</span>
                   {' '}{selectedToken.symbol}
+                </span>
+              )}
+              {address && !onCorrectChain && (
+                <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                  Switch wallet to {selectedChain.name} to see balance
                 </span>
               )}
             </div>
@@ -373,7 +380,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
                         <span className="font-bold">{t.symbol}</span>
                         <span className="text-xs" style={{ color: 'var(--muted)' }}>{t.name}</span>
                         {/* Balance on the right */}
-                        {address && balances[t.symbol] !== undefined && (
+                {address && onCorrectChain && balances[t.symbol] !== undefined && (
                           <span className="ml-auto text-xs font-semibold tabular-nums"
                             style={{ color: balances[t.symbol] === '0' ? 'var(--muted)' : 'var(--text)' }}>
                             {balances[t.symbol]}
@@ -398,7 +405,7 @@ export default function DepositPanel({ vault, onClose }: DepositPanelProps) {
                   onFocus={e => (e.target.style.borderColor = 'var(--blue)')}
                   onBlur={e => (e.target.style.borderColor = 'var(--border)')}
                 />
-                {rawSelectedBalance && rawSelectedBalance > BigInt(0) && (
+                {onCorrectChain && rawSelectedBalance && rawSelectedBalance > BigInt(0) && (
                   <button onClick={handleMax}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold px-1.5 py-0.5 rounded transition-opacity hover:opacity-70"
                     style={{ background: 'var(--blue-dim)', color: 'var(--blue)' }}>
