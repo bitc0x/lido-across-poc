@@ -389,6 +389,7 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
                 {tokenOpen && (
                   <div className="absolute z-20 top-full mt-1 rounded-xl overflow-hidden shadow-2xl"
                     style={{ background: '#0d1222', border: '1px solid var(--border-hover)', minWidth: 220 }}>
+                    <div className="max-h-56 overflow-y-auto">
                     {selectedChain.tokens.map(t => (
                       <button key={t.symbol} onClick={() => { setSelectedToken(t); setTokenOpen(false) }}
                         className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-white/5 transition-colors"
@@ -407,6 +408,7 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
                         )}
                       </button>
                     ))}
+                    </div>
                   </div>
                 )}
               </div>
