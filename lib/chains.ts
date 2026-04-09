@@ -169,6 +169,92 @@ export const SUPPORTED_CHAINS: ChainInfo[] = [
       { symbol: 'WETH', name: 'Wrapped ETH', address: '0x2170Ed0880ac9A755fd29B2688956BD959F933F8', decimals: 18, logoUrl: LOGOS.ETH },
     ],
   },
+  {
+    id: 81457, name: 'Blast', shortName: 'BLAST', color: '#FCFC03',
+    logoUrl: `${CHAIN_BASE}/blast.svg`,
+    tokens: [
+      { symbol: 'ETH',  name: 'Ethereum',    address: '0x0000000000000000000000000000000000000000', decimals: 18, isNative: true, logoUrl: LOGOS.ETH },
+      { symbol: 'WETH', name: 'Wrapped ETH',  address: '0x4300000000000000000000000000000000000004', decimals: 18, logoUrl: LOGOS.ETH },
+      { symbol: 'WBTC', name: 'Wrapped BTC',  address: '0xF7bc58b8D8f97ADC129cfC4c9f45Ce3C0E1D2692', decimals: 8,  logoUrl: LOGOS.WBTC },
+    ],
+  },
+  {
+    id: 1135, name: 'Lisk', shortName: 'LISK', color: '#4070F4',
+    logoUrl: `${CHAIN_BASE}/lisk.svg`,
+    tokens: [
+      { symbol: 'ETH',    name: 'Ethereum',    address: '0x0000000000000000000000000000000000000000', decimals: 18, isNative: true, logoUrl: LOGOS.ETH },
+      { symbol: 'WETH',   name: 'Wrapped ETH', address: '0x4200000000000000000000000000000000000006', decimals: 18, logoUrl: LOGOS.ETH },
+      { symbol: 'USDC.e', name: 'Bridged USDC', address: '0xF242275d3a6527d877f2c927a82D9b057609cc71', decimals: 6, logoUrl: LOGOS.USDC },
+      { symbol: 'USDT',   name: 'Tether',       address: '0x05D032ac25d322df992303dCa074EE7392C117b9', decimals: 6, logoUrl: LOGOS.USDT },
+    ],
+  },
+  {
+    id: 7777777, name: 'Zora', shortName: 'ZORA', color: '#AB6EFA',
+    logoUrl: `${CHAIN_BASE}/zora.svg`,
+    tokens: [
+      { symbol: 'ETH',  name: 'Ethereum',   address: '0x0000000000000000000000000000000000000000', decimals: 18, isNative: true, logoUrl: LOGOS.ETH },
+      { symbol: 'WETH', name: 'Wrapped ETH', address: '0x4200000000000000000000000000000000000006', decimals: 18, logoUrl: LOGOS.ETH },
+    ],
+  },
+  {
+    id: 1868, name: 'Soneium', shortName: 'SON', color: '#00A8FF',
+    logoUrl: `${CHAIN_BASE}/soneium.svg`,
+    tokens: [
+      { symbol: 'ETH',    name: 'Ethereum',     address: '0x0000000000000000000000000000000000000000', decimals: 18, isNative: true, logoUrl: LOGOS.ETH },
+      { symbol: 'WETH',   name: 'Wrapped ETH',  address: '0x4200000000000000000000000000000000000006', decimals: 18, logoUrl: LOGOS.ETH },
+      { symbol: 'USDC.e', name: 'Bridged USDC', address: '0xbA9986D2381edf1DA03B0B9c1f8b00dc4AacC369', decimals: 6,  logoUrl: LOGOS.USDC },
+      { symbol: 'USDT',   name: 'Tether',       address: '0x3A337a6adA9d885b6Ad95ec48F9b75f197b5AE35', decimals: 6,  logoUrl: LOGOS.USDT },
+    ],
+  },
+  {
+    id: 232, name: 'Lens', shortName: 'LENS', color: '#00501E',
+    logoUrl: `${CHAIN_BASE}/lens.svg`,
+    tokens: [
+      { symbol: 'ETH',  name: 'Ethereum',   address: '0x0000000000000000000000000000000000000000', decimals: 18, isNative: true, logoUrl: LOGOS.ETH },
+      { symbol: 'WETH', name: 'Wrapped ETH', address: '0x4200000000000000000000000000000000000006', decimals: 18, logoUrl: LOGOS.ETH },
+      { symbol: 'USDC', name: 'USD Coin',    address: '0x88F08E304EC4f90D644Cec3Fb69b8aD414acf884', decimals: 6,  logoUrl: LOGOS.USDC },
+    ],
+  },
+  {
+    id: 4326, name: 'MegaETH', shortName: 'MEGA', color: '#FF4500',
+    logoUrl: `${CHAIN_BASE}/megaeth.svg`,
+    tokens: [
+      { symbol: 'ETH',  name: 'Ethereum',   address: '0x0000000000000000000000000000000000000000', decimals: 18, isNative: true, logoUrl: LOGOS.ETH },
+      { symbol: 'WETH', name: 'Wrapped ETH', address: '0x4200000000000000000000000000000000000006', decimals: 18, logoUrl: LOGOS.ETH },
+    ],
+  },
+  {
+    id: 999, name: 'HyperEVM', shortName: 'HYPER', color: '#3EE8B5',
+    logoUrl: `${CHAIN_BASE}/hyperevm.svg`,
+    tokens: [
+      { symbol: 'USDC',  name: 'USD Coin', address: '0xb88339CB7199b77E23DB6E890353E22632Ba630f', decimals: 6, logoUrl: LOGOS.USDC },
+      { symbol: 'USDT0', name: 'Tether',   address: '0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb', decimals: 6, logoUrl: LOGOS.USDT },
+    ],
+  },
+  {
+    id: 143, name: 'Monad', shortName: 'MON', color: '#836EF9',
+    logoUrl: `${CHAIN_BASE}/monad.svg`,
+    tokens: [
+      { symbol: 'USDC',  name: 'USD Coin', address: '0x754704Bc059F8C67012fEd69BC8A327a5aafb603', decimals: 6,  logoUrl: LOGOS.USDC },
+      { symbol: 'USDT0', name: 'Tether',   address: '0xe7cd86e13AC4309349F30B3435a9d337750fC82D', decimals: 6,  logoUrl: LOGOS.USDT },
+      { symbol: 'WETH',  name: 'Wrapped ETH', address: '0xEE8c0E9f1BFFb4Eb878d8f15f368A02a35481242', decimals: 18, logoUrl: LOGOS.ETH },
+      { symbol: 'WBTC',  name: 'Wrapped BTC', address: '0x0555E30da8f98308EdB960aa94C0Db47230d2B9c', decimals: 8,  logoUrl: LOGOS.WBTC },
+    ],
+  },
+  {
+    id: 9745, name: 'Plasma', shortName: 'PLSM', color: '#7B2FBE',
+    logoUrl: `${CHAIN_BASE}/plasma.svg`,
+    tokens: [
+      { symbol: 'USDT0', name: 'Tether', address: '0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb', decimals: 6, logoUrl: LOGOS.USDT },
+    ],
+  },
+  {
+    id: 4217, name: 'Tempo', shortName: 'TEMPO', color: '#FF6B35',
+    logoUrl: `${CHAIN_BASE}/tempo.svg`,
+    tokens: [
+      { symbol: 'USDC.e', name: 'Bridged USDC', address: '0x20C000000000000000000000b9537d11c60E8b50', decimals: 6, logoUrl: LOGOS.USDC },
+    ],
+  },
 ]
 
 // Output tokens on Ethereum mainnet
