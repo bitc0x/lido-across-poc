@@ -287,7 +287,7 @@ export const VAULTS = {
     shareToken: 'earnUSD',
     outputToken: EARN_USD_OUTPUT,
     color: '#5ac878',
-    description: 'USD yield strategies with transparent asset selection and risk controls',
+    description: 'USD yield vault with transparent asset selection and risk controls',
     nativeAssets: ['USDC', 'USDT'],
   },
 }
