@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 // Actual vault addresses from Lido's mainnet.json config (not the Etherscan proxy addresses)
 const ETH_VAULT  = '0x6a37725ca7f4CE81c004c955f7280d5C704a249e'
@@ -18,8 +19,8 @@ function formatTvl(usdRaw: string, usdDecimals: number): string {
 
 async function fetchVault(address: string) {
   const [apyRes, dataRes] = await Promise.all([
-    fetch(`${MELLOW_API}/v1/chain/${CHAIN_ID}/core-vaults/${address}/apy`, { cache: 'no-store' }),
-    fetch(`${MELLOW_API}/v1/chain/${CHAIN_ID}/core-vaults/${address}/data`, { cache: 'no-store' }),
+    fetch(`${MELLOW_API}/v1/chain/${CHAIN_ID}/core-vaults/${address}/apy`),
+    fetch(`${MELLOW_API}/v1/chain/${CHAIN_ID}/core-vaults/${address}/data`),
   ])
 
   const [apyJson, dataJson] = await Promise.all([apyRes.json(), dataRes.json()])
