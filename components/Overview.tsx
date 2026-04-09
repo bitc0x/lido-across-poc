@@ -53,18 +53,14 @@ export default function Overview({ onGetStarted }: OverviewProps) {
 
       {/* HERO */}
       <section className="text-center space-y-6 animate-fade-up stagger-1">
-        <div className="inline-flex items-center gap-3 mb-2">
+        <div className="inline-flex items-center gap-3 mb-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="https://europe1.discourse-cdn.com/flex013/uploads/lido/original/1X/8d3e77d0e4936c97f2b6189ab18370bd88fbe91e.png"
             alt="Lido" width={40} height={40} style={{ borderRadius: '50%' }} />
-          <span style={{ color: 'var(--border-hover)', fontSize: 20 }}>x</span>
+          <span style={{ color: 'var(--muted-light)', fontSize: 20, fontWeight: 300 }}>×</span>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="https://s3.coinmarketcap.com/static-gravity/image/54490f7ee08a4cb185c13049500dc279.png"
             alt="Across" width={40} height={40} style={{ borderRadius: '50%' }} />
-        </div>
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold"
-          style={{ background: 'var(--blue-dim)', color: 'var(--blue)', border: '1px solid rgba(0,163,255,0.2)' }}>
-          Proof of Concept
         </div>
 
         <h1 className="text-4xl md:text-5xl font-extrabold leading-tight tracking-tight" style={{ color: 'var(--text)' }}>
