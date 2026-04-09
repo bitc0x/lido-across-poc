@@ -69,8 +69,8 @@ function VaultCard({ vaultKey, stats, statsLoading, onDeposit }: VaultCardProps)
     : ['USDC', 'USDT', '+ any via Across']
 
   const withAcross = vaultKey === 'ETH'
-    ? ['ETH, WETH, WBTC, DAI on 15+ chains', 'USDC, USDT on any chain', 'Any liquid ERC-20 via swap']
-    : ['USDC, USDT on 15+ chains', 'ETH, WETH, DAI on any chain', 'WBTC, stablecoins via swap']
+    ? ['ETH, WETH, wstETH on 15+ chains', 'WBTC, DAI converted to WETH', 'Any ERC-20 routed via swap']
+    : ['USDC, USDT on 15+ chains', 'ETH, WETH, DAI converted to USDC', 'WBTC, stablecoins via swap']
 
   return (
     <div className="rounded-2xl overflow-hidden"
