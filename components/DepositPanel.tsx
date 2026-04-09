@@ -436,7 +436,7 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
             </div>
             <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
               {isDirectDeposit
-                ? 'Direct deposit on Ethereum — no bridge, no fees'
+                ? 'Direct deposit on Ethereum'
                 : 'Any chain, any asset — directly into the vault'}
             </p>
           </div>
