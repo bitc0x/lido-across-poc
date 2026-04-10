@@ -278,7 +278,6 @@ export const VAULTS = {
     outputToken: EARN_ETH_OUTPUT,
     color: '#00a3ff',
     description: 'ETH growth vault allocating across leading blue-chip DeFi protocols',
-    nativeAssets: ['ETH', 'WETH', 'stETH', 'wstETH'],
   },
   USD: {
     address: '0x4Ce1ac8F43E0E5BD7A346A98aF777bF8fbeA1981',
@@ -287,6 +286,5 @@ export const VAULTS = {
     outputToken: EARN_USD_OUTPUT,
     color: '#5ac878',
     description: 'USD yield vault with transparent asset selection and risk controls',
-    nativeAssets: ['USDC', 'USDT'],
   },
 }
