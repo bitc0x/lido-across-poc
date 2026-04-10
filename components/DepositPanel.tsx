@@ -11,15 +11,15 @@ import { SUPPORTED_CHAINS, type ChainInfo, type TokenInfo } from '@/lib/chains'
 const VAULT_CONFIG = {
   ETH: {
     // All ETH-type assets arrive as WETH on Ethereum mainnet
-    outputToken:  '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
-    depositQueue: '0xCe6C2505fEF74d2dE10FCF1d534cB73eCc837976', // ethSyncDepositQueueWETH
-    shareToken:   '0xBBFC8683C8fE8cF73777feDE7ab9574935fea0A4', // EarnETH vault shares
+    outputToken:      '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
+    depositQueue:     '0xCe6C2505fEF74d2dE10FCF1d534cB73eCc837976', // ethSyncDepositQueueWETH
+    shareTokenAddress:'0xBBFC8683C8fE8cF73777feDE7ab9574935fea0A4', // EarnETH vault shares (ERC-20)
   },
   USD: {
     // All USD-type assets arrive as USDC on Ethereum mainnet
-    outputToken:  '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
-    depositQueue: '0xf6AFAf6afcAe116dD37A779D50fE6c5fa6f8C8f5', // usdSyncDepositQueueUSDC
-    shareToken:   '0x4Ce1ac8F43E0E5BD7A346A98aF777bF8fbeA1981', // EarnUSD vault shares
+    outputToken:      '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+    depositQueue:     '0xf6AFAf6afcAe116dD37A779D50fE6c5fa6f8C8f5', // usdSyncDepositQueueUSDC
+    shareTokenAddress:'0x4Ce1ac8F43E0E5BD7A346A98aF777bF8fbeA1981', // EarnUSD vault shares (ERC-20)
   },
 } as const
 
@@ -319,12 +319,12 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
           ],
         },
         {
-          target: cfg.shareToken,
+          target: cfg.shareTokenAddress,
           functionSignature: 'function transfer(address to, uint256 amount)',
           value: '0',
           args: [
             { value: depositor },
-            { value: '0', populateDynamically: true, balanceSourceToken: cfg.shareToken },
+            { value: '0', populateDynamically: true, balanceSourceToken: cfg.shareTokenAddress },
           ],
         },
       ]
@@ -614,7 +614,7 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
                 {loading ? '...' : outputAmt ?? '0'}
               </span>
               <span className="text-sm font-bold" style={{ color: vault.color }}>
-                {vault.outputToken.symbol}
+                {isDirectDeposit ? selectedToken.symbol : vault.outputToken.symbol}
               </span>
               <span className="text-xs ml-1" style={{ color: 'var(--muted)' }}>
                 → deposited into {vault.name}
