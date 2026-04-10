@@ -65,7 +65,7 @@ function VaultCard({ vaultKey, stats, statsLoading, onDeposit }: VaultCardProps)
   const [tab, setTab] = useState<'info' | 'assets'>('info')
 
   const acceptedAssets = vaultKey === 'ETH'
-    ? ['ETH', 'WETH', 'stETH', 'wstETH', '+ any via Across']
+    ? ['ETH', 'WETH', 'wstETH', '+ any via Across']
     : ['USDC', 'USDT', '+ any via Across']
 
   const withAcross = vaultKey === 'ETH'
