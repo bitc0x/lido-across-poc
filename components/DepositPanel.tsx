@@ -23,7 +23,8 @@ const VAULT_CONFIG = {
   },
 } as const
 
-// Across MulticallHandler on Ethereum mainnet - recipient for embedded actions
+// Across MulticallHandler on Ethereum mainnet — passed as recipient hint, but the Across API
+// determines the actual recipient when actions are present, overriding this value.
 const MULTICALL_HANDLER = '0x924a9f036260DdD5808007E1AA95f08eD08aA569'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -633,7 +634,9 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
               <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
                 <div className="text-xs mb-0.5" style={{ color: 'var(--muted)' }}>{isDirectDeposit ? 'Fee' : 'Bridge fee'}</div>
                 <div className="text-sm font-bold" style={{ color: 'var(--text)' }}>
-                  {isDirectDeposit ? '' : feeUsd ? `~$${parseFloat(feeUsd).toFixed(4)}` : 'Free'}
+                  {isDirectDeposit ? '' : feeUsd
+                    ? `~$${parseFloat(feeUsd) >= 0.01 ? parseFloat(feeUsd).toFixed(2) : parseFloat(feeUsd).toFixed(4)}`
+                    : 'Free'}
                 </div>
               </div>
               <div className="rounded-lg p-2.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
