@@ -13,11 +13,13 @@ const VAULT_CONFIG = {
     // All ETH-type assets arrive as WETH on Ethereum mainnet
     outputToken:  '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
     depositQueue: '0xCe6C2505fEF74d2dE10FCF1d534cB73eCc837976', // ethSyncDepositQueueWETH
+    shareToken:   '0xBBFC8683C8fE8cF73777feDE7ab9574935fea0A4', // EarnETH vault shares
   },
   USD: {
     // All USD-type assets arrive as USDC on Ethereum mainnet
     outputToken:  '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
     depositQueue: '0xf6AFAf6afcAe116dD37A779D50fE6c5fa6f8C8f5', // usdSyncDepositQueueUSDC
+    shareToken:   '0x4Ce1ac8F43E0E5BD7A346A98aF777bF8fbeA1981', // EarnUSD vault shares
   },
 } as const
 
@@ -292,7 +294,10 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
         integratorId: '0x00f1',
       })
 
-      // Embedded actions: approve output token to deposit queue, then deposit into vault
+      // Embedded actions (execute atomically on Ethereum when relayer fills):
+      // 1. Approve output token to deposit queue
+      // 2. Deposit into vault (mints shares to MulticallHandler)
+      // 3. Transfer minted shares from MulticallHandler to the original depositor
       const actions = [
         {
           target: cfg.outputToken,
@@ -311,6 +316,15 @@ export default function DepositPanel({ vault, vaultKey, onClose }: DepositPanelP
             { value: '0', populateDynamically: true, balanceSourceToken: cfg.outputToken },
             { value: ZERO_ADDR },
             { value: [] },
+          ],
+        },
+        {
+          target: cfg.shareToken,
+          functionSignature: 'function transfer(address to, uint256 amount)',
+          value: '0',
+          args: [
+            { value: depositor },
+            { value: '0', populateDynamically: true, balanceSourceToken: cfg.shareToken },
           ],
         },
       ]
